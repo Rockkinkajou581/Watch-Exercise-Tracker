@@ -1,0 +1,990 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CB807A952FDA20BD00662B57 /* LiftLogger Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CB807A942FDA20BD00662B57 /* LiftLogger Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CB807A7F2FDA20BD00662B57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB807A692FDA20BB00662B57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CB807A702FDA20BC00662B57;
+			remoteInfo = LiftLogger;
+		};
+		CB807A892FDA20BD00662B57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB807A692FDA20BB00662B57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CB807A702FDA20BC00662B57;
+			remoteInfo = LiftLogger;
+		};
+		CB807A962FDA20BD00662B57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB807A692FDA20BB00662B57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CB807A932FDA20BD00662B57;
+			remoteInfo = "LiftLogger Watch App";
+		};
+		CB807AA42FDA20BD00662B57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB807A692FDA20BB00662B57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CB807A932FDA20BD00662B57;
+			remoteInfo = "LiftLogger Watch App";
+		};
+		CB807AAE2FDA20BD00662B57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB807A692FDA20BB00662B57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CB807A932FDA20BD00662B57;
+			remoteInfo = "LiftLogger Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CB807ABA2FDA20BD00662B57 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				CB807A952FDA20BD00662B57 /* LiftLogger Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		CB807A712FDA20BC00662B57 /* LiftLogger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiftLogger.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB807A7E2FDA20BD00662B57 /* LiftLoggerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiftLoggerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB807A882FDA20BD00662B57 /* LiftLoggerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiftLoggerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB807A942FDA20BD00662B57 /* LiftLogger Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "LiftLogger Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB807AA32FDA20BD00662B57 /* LiftLogger Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "LiftLogger Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB807AAD2FDA20BD00662B57 /* LiftLogger Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "LiftLogger Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		CB807A732FDA20BC00662B57 /* LiftLogger */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiftLogger;
+			sourceTree = "<group>";
+		};
+		CB807A812FDA20BD00662B57 /* LiftLoggerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiftLoggerTests;
+			sourceTree = "<group>";
+		};
+		CB807A8B2FDA20BD00662B57 /* LiftLoggerUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiftLoggerUITests;
+			sourceTree = "<group>";
+		};
+		CB807A982FDA20BD00662B57 /* LiftLogger Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "LiftLogger Watch App";
+			sourceTree = "<group>";
+		};
+		CB807AA62FDA20BD00662B57 /* LiftLogger Watch AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "LiftLogger Watch AppTests";
+			sourceTree = "<group>";
+		};
+		CB807AB02FDA20BD00662B57 /* LiftLogger Watch AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "LiftLogger Watch AppUITests";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CB807A6E2FDA20BC00662B57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A7B2FDA20BD00662B57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A852FDA20BD00662B57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A912FDA20BD00662B57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807AA02FDA20BD00662B57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807AAA2FDA20BD00662B57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CB807A682FDA20BB00662B57 = {
+			isa = PBXGroup;
+			children = (
+				CB807A732FDA20BC00662B57 /* LiftLogger */,
+				CB807A812FDA20BD00662B57 /* LiftLoggerTests */,
+				CB807A8B2FDA20BD00662B57 /* LiftLoggerUITests */,
+				CB807A982FDA20BD00662B57 /* LiftLogger Watch App */,
+				CB807AA62FDA20BD00662B57 /* LiftLogger Watch AppTests */,
+				CB807AB02FDA20BD00662B57 /* LiftLogger Watch AppUITests */,
+				CB807A722FDA20BC00662B57 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CB807A722FDA20BC00662B57 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CB807A712FDA20BC00662B57 /* LiftLogger.app */,
+				CB807A7E2FDA20BD00662B57 /* LiftLoggerTests.xctest */,
+				CB807A882FDA20BD00662B57 /* LiftLoggerUITests.xctest */,
+				CB807A942FDA20BD00662B57 /* LiftLogger Watch App.app */,
+				CB807AA32FDA20BD00662B57 /* LiftLogger Watch AppTests.xctest */,
+				CB807AAD2FDA20BD00662B57 /* LiftLogger Watch AppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CB807A702FDA20BC00662B57 /* LiftLogger */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB807ABB2FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger" */;
+			buildPhases = (
+				CB807A6D2FDA20BC00662B57 /* Sources */,
+				CB807A6E2FDA20BC00662B57 /* Frameworks */,
+				CB807A6F2FDA20BC00662B57 /* Resources */,
+				CB807ABA2FDA20BD00662B57 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CB807A972FDA20BD00662B57 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CB807A732FDA20BC00662B57 /* LiftLogger */,
+			);
+			name = LiftLogger;
+			packageProductDependencies = (
+			);
+			productName = LiftLogger;
+			productReference = CB807A712FDA20BC00662B57 /* LiftLogger.app */;
+			productType = "com.apple.product-type.application";
+		};
+		CB807A7D2FDA20BD00662B57 /* LiftLoggerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB807ABE2FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLoggerTests" */;
+			buildPhases = (
+				CB807A7A2FDA20BD00662B57 /* Sources */,
+				CB807A7B2FDA20BD00662B57 /* Frameworks */,
+				CB807A7C2FDA20BD00662B57 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CB807A802FDA20BD00662B57 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CB807A812FDA20BD00662B57 /* LiftLoggerTests */,
+			);
+			name = LiftLoggerTests;
+			packageProductDependencies = (
+			);
+			productName = LiftLoggerTests;
+			productReference = CB807A7E2FDA20BD00662B57 /* LiftLoggerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		CB807A872FDA20BD00662B57 /* LiftLoggerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB807AC12FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLoggerUITests" */;
+			buildPhases = (
+				CB807A842FDA20BD00662B57 /* Sources */,
+				CB807A852FDA20BD00662B57 /* Frameworks */,
+				CB807A862FDA20BD00662B57 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CB807A8A2FDA20BD00662B57 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CB807A8B2FDA20BD00662B57 /* LiftLoggerUITests */,
+			);
+			name = LiftLoggerUITests;
+			packageProductDependencies = (
+			);
+			productName = LiftLoggerUITests;
+			productReference = CB807A882FDA20BD00662B57 /* LiftLoggerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		CB807A932FDA20BD00662B57 /* LiftLogger Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB807AB72FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger Watch App" */;
+			buildPhases = (
+				CB807A902FDA20BD00662B57 /* Sources */,
+				CB807A912FDA20BD00662B57 /* Frameworks */,
+				CB807A922FDA20BD00662B57 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CB807A982FDA20BD00662B57 /* LiftLogger Watch App */,
+			);
+			name = "LiftLogger Watch App";
+			packageProductDependencies = (
+			);
+			productName = "LiftLogger Watch App";
+			productReference = CB807A942FDA20BD00662B57 /* LiftLogger Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		CB807AA22FDA20BD00662B57 /* LiftLogger Watch AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB807AC42FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger Watch AppTests" */;
+			buildPhases = (
+				CB807A9F2FDA20BD00662B57 /* Sources */,
+				CB807AA02FDA20BD00662B57 /* Frameworks */,
+				CB807AA12FDA20BD00662B57 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CB807AA52FDA20BD00662B57 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CB807AA62FDA20BD00662B57 /* LiftLogger Watch AppTests */,
+			);
+			name = "LiftLogger Watch AppTests";
+			packageProductDependencies = (
+			);
+			productName = "LiftLogger Watch AppTests";
+			productReference = CB807AA32FDA20BD00662B57 /* LiftLogger Watch AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		CB807AAC2FDA20BD00662B57 /* LiftLogger Watch AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB807AC72FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger Watch AppUITests" */;
+			buildPhases = (
+				CB807AA92FDA20BD00662B57 /* Sources */,
+				CB807AAA2FDA20BD00662B57 /* Frameworks */,
+				CB807AAB2FDA20BD00662B57 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CB807AAF2FDA20BD00662B57 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CB807AB02FDA20BD00662B57 /* LiftLogger Watch AppUITests */,
+			);
+			name = "LiftLogger Watch AppUITests";
+			packageProductDependencies = (
+			);
+			productName = "LiftLogger Watch AppUITests";
+			productReference = CB807AAD2FDA20BD00662B57 /* LiftLogger Watch AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CB807A692FDA20BB00662B57 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					CB807A702FDA20BC00662B57 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					CB807A7D2FDA20BD00662B57 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = CB807A702FDA20BC00662B57;
+					};
+					CB807A872FDA20BD00662B57 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = CB807A702FDA20BC00662B57;
+					};
+					CB807A932FDA20BD00662B57 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					CB807AA22FDA20BD00662B57 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = CB807A932FDA20BD00662B57;
+					};
+					CB807AAC2FDA20BD00662B57 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = CB807A932FDA20BD00662B57;
+					};
+				};
+			};
+			buildConfigurationList = CB807A6C2FDA20BB00662B57 /* Build configuration list for PBXProject "LiftLogger" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CB807A682FDA20BB00662B57;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CB807A722FDA20BC00662B57 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CB807A702FDA20BC00662B57 /* LiftLogger */,
+				CB807A7D2FDA20BD00662B57 /* LiftLoggerTests */,
+				CB807A872FDA20BD00662B57 /* LiftLoggerUITests */,
+				CB807A932FDA20BD00662B57 /* LiftLogger Watch App */,
+				CB807AA22FDA20BD00662B57 /* LiftLogger Watch AppTests */,
+				CB807AAC2FDA20BD00662B57 /* LiftLogger Watch AppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CB807A6F2FDA20BC00662B57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A7C2FDA20BD00662B57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A862FDA20BD00662B57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A922FDA20BD00662B57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807AA12FDA20BD00662B57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807AAB2FDA20BD00662B57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CB807A6D2FDA20BC00662B57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A7A2FDA20BD00662B57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A842FDA20BD00662B57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A902FDA20BD00662B57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807A9F2FDA20BD00662B57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB807AA92FDA20BD00662B57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		CB807A802FDA20BD00662B57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CB807A702FDA20BC00662B57 /* LiftLogger */;
+			targetProxy = CB807A7F2FDA20BD00662B57 /* PBXContainerItemProxy */;
+		};
+		CB807A8A2FDA20BD00662B57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CB807A702FDA20BC00662B57 /* LiftLogger */;
+			targetProxy = CB807A892FDA20BD00662B57 /* PBXContainerItemProxy */;
+		};
+		CB807A972FDA20BD00662B57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CB807A932FDA20BD00662B57 /* LiftLogger Watch App */;
+			targetProxy = CB807A962FDA20BD00662B57 /* PBXContainerItemProxy */;
+		};
+		CB807AA52FDA20BD00662B57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CB807A932FDA20BD00662B57 /* LiftLogger Watch App */;
+			targetProxy = CB807AA42FDA20BD00662B57 /* PBXContainerItemProxy */;
+		};
+		CB807AAF2FDA20BD00662B57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CB807A932FDA20BD00662B57 /* LiftLogger Watch App */;
+			targetProxy = CB807AAE2FDA20BD00662B57 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		CB807AB52FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		CB807AB62FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		CB807AB82FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = LiftLogger;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = Apple.LiftLogger;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLogger.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
+		CB807AB92FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = LiftLogger;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = Apple.LiftLogger;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLogger.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
+		CB807ABC2FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = LiftLogger;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLogger;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CB807ABD2FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = LiftLogger;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLogger;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CB807ABF2FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLoggerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiftLogger.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LiftLogger";
+			};
+			name = Debug;
+		};
+		CB807AC02FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLoggerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiftLogger.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LiftLogger";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CB807AC22FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLoggerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LiftLogger;
+			};
+			name = Debug;
+		};
+		CB807AC32FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Apple.LiftLoggerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LiftLogger;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CB807AC52FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Apple.LiftLogger-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiftLogger Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LiftLogger Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
+		CB807AC62FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Apple.LiftLogger-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiftLogger Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LiftLogger Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
+		CB807AC82FDA20BD00662B57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Apple.LiftLogger-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "LiftLogger Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
+		CB807AC92FDA20BD00662B57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Apple.LiftLogger-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "LiftLogger Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CB807A6C2FDA20BB00662B57 /* Build configuration list for PBXProject "LiftLogger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807AB52FDA20BD00662B57 /* Debug */,
+				CB807AB62FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB807AB72FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807AB82FDA20BD00662B57 /* Debug */,
+				CB807AB92FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB807ABB2FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807ABC2FDA20BD00662B57 /* Debug */,
+				CB807ABD2FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB807ABE2FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLoggerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807ABF2FDA20BD00662B57 /* Debug */,
+				CB807AC02FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB807AC12FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLoggerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807AC22FDA20BD00662B57 /* Debug */,
+				CB807AC32FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB807AC42FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger Watch AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807AC52FDA20BD00662B57 /* Debug */,
+				CB807AC62FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB807AC72FDA20BD00662B57 /* Build configuration list for PBXNativeTarget "LiftLogger Watch AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB807AC82FDA20BD00662B57 /* Debug */,
+				CB807AC92FDA20BD00662B57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CB807A692FDA20BB00662B57 /* Project object */;
+}
