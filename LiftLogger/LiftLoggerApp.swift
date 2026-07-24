@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 @main
 struct LiftLoggerApp: App {
@@ -32,6 +33,20 @@ struct PhoneRootView: View {
                     Button("Sync subject to watch") {
                         store.sendSubjectToWatch()
                     }
+                }
+
+                Section("Rep tagging") {
+                    NavigationLink {
+                        RepTapView().environmentObject(store)
+                    } label: {
+                        Label(store.repSessionActive ? "Tagging in progress…" : "Open rep tagger",
+                              systemImage: "hand.tap")
+                            .foregroundStyle(store.repSessionActive ? Color.green : Color.primary)
+                    }
+                    Text("Open this and hold the phone while someone lifts on the watch. "
+                         + "Tap once per rep — used as ground truth for rep counting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Received sessions") {
@@ -85,5 +100,69 @@ struct PhoneRootView: View {
         let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
         let bytes = (attrs?[.size] as? Int64) ?? 0
         return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}
+
+/// Full-screen rep tagger: the observer taps the big button once per rep while
+/// the lifter performs the set on the watch. The button is only active while a
+/// set is open (the watch drives that via live messages); each tap is timestamped
+/// and written as ground-truth rep timing for the supervised rep counter.
+struct RepTapView: View {
+    @EnvironmentObject var store: SessionStore
+
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 4) {
+                Text(store.repExercise.isEmpty
+                     ? (store.repSessionActive ? "—" : "Not recording")
+                     : store.repExercise.replacingOccurrences(of: "_", with: " "))
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+                Text(store.repStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            HStack(spacing: 28) {
+                stat("This set", store.repSetCount)
+                stat("Session", store.repSessionTotal)
+            }
+
+            Button {
+                store.recordTap()
+                let gen = UIImpactFeedbackGenerator(style: .heavy)
+                gen.impactOccurred()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(store.repSetArmed ? Color.green : Color.gray.opacity(0.3))
+                    Text(store.repSetArmed ? "TAP\nREP" : "WAIT")
+                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 240, height: 240)
+            }
+            .buttonStyle(.plain)
+            .disabled(!store.repSetArmed)
+
+            Text("Button activates automatically when a set starts on the watch.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .navigationTitle("Rep Tagger")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func stat(_ label: String, _ value: Int) -> some View {
+        VStack {
+            Text("\(value)")
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
     }
 }

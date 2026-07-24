@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiftLogger: The Complete Build (A Course)</title>
+<!-- Fonts: Fraunces (display serif), Spline Sans (body), JetBrains Mono (code) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   DESIGN TOKENS: "Engineering Field Notebook"
+   Solid notebook PAGE floats above a gridded DESK so the grid lines
+   frame the page but never sit behind letters/code (max legibility).
+   ===================================================================== */
+:root{
+  --desk:#dccfb3;            /* gridded surround */
+  --paper:#f7f1e4;           /* solid page (text sits here) */
+  --paper-2:#efe6d2;         /* soft sub-panel */
+  --code-bg:#ece1ca;         /* code box */
+  --ink:#221c12;             /* primary text */
+  --muted:#6c624a;           /* secondary text */
+  --faint:#938868;           /* tertiary / captions */
+  --rule:#cdbf9f;            /* grid line */
+  --rule-strong:#bcaa86;
+  --signal:#c0461c;          /* red margin + "deploy" accent */
+  --blue:#2b5488;            /* "capture" accent */
+  --green:#3f6f3a;           /* "train" accent */
+  --purple:#6d4b86;          /* numbers / misc */
+  /* code token colors */
+  --c-com:#8a7f63; --c-key:#2b5488; --c-str:#9c5a2a; --c-num:#6d4b86;
+  --serif:'Fraunces',Georgia,serif;
+  --sans:'Spline Sans',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#cabd9f;overflow:hidden;font-family:var(--sans);color:var(--ink)}
+
+/* ---------- Fixed 16:9 stage, scaled uniformly ---------- */
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;width:1920px;height:1080px;transform-origin:center center;
+  background:var(--desk);overflow:hidden}
+/* the DESK grid (fine + bold): lives behind the floating page only */
+.stage::before{content:"";position:absolute;inset:0;
+  background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);
+  background-size:48px 48px;opacity:.5}
+.stage::after{content:"";position:absolute;inset:0;
+  background-image:linear-gradient(rgba(120,110,80,.18) 1.5px,transparent 1.5px),linear-gradient(90deg,rgba(120,110,80,.18) 1.5px,transparent 1.5px);
+  background-size:240px 240px}
+
+/* ---------- Slides ---------- */
+.deck{position:absolute;inset:0}
+.slide{position:absolute;inset:0;visibility:hidden;opacity:0;pointer-events:none;
+  transition:opacity .45s ease}
+.slide.active{visibility:visible;opacity:1;pointer-events:auto}
+
+/* The PAGE: a solid notebook sheet floating on the desk (grid never behind text) */
+.page{position:absolute;inset:46px;background:var(--paper);
+  box-shadow:0 18px 50px rgba(60,45,20,.28),0 2px 0 rgba(0,0,0,.05);
+  border:1px solid #e4d9bf;border-radius:4px;overflow:hidden}
+/* very faint page grid for "paper" feel, low enough to never hurt legibility,
+   and all real text sits on solid cards/blocks above it */
+.page::before{content:"";position:absolute;inset:0;
+  background-image:linear-gradient(rgba(150,138,100,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(150,138,100,.10) 1px,transparent 1px);
+  background-size:48px 48px;pointer-events:none}
+.margin-rule{position:absolute;top:0;bottom:0;left:138px;width:2px;background:var(--signal);opacity:.42}
+.margin-rule::before,.margin-rule::after{content:"";position:absolute;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--signal);opacity:.5}
+.margin-rule::before{top:70px} .margin-rule::after{bottom:70px}
+
+.inner{position:absolute;inset:0;padding:56px 92px 56px 196px;display:flex;flex-direction:column}
+
+/* slide chrome */
+.sec-tag{font-family:var(--mono);font-size:18px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--signal);display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.sec-tag .n{color:var(--faint)}
+.sec-tag .pill{background:var(--paper-2);border:1px solid var(--rule);border-radius:999px;padding:5px 14px;font-size:16px;letter-spacing:.12em;color:var(--muted)}
+h2{font-family:var(--serif);font-weight:600;font-size:50px;line-height:1.0;letter-spacing:-.01em;color:var(--ink)}
+h2 .hl{color:var(--signal);font-style:italic}
+.lede{font-size:22px;line-height:1.4;color:var(--muted);max-width:1480px;margin-top:11px}
+.pageno{position:absolute;right:54px;bottom:40px;font-family:var(--mono);font-size:20px;color:var(--faint)}
+.section-foot{position:absolute;left:196px;bottom:40px;font-family:var(--mono);font-size:18px;color:var(--faint);letter-spacing:.08em}
+
+/* body building blocks */
+.body{margin-top:16px;flex:1;min-height:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.grid2.wide-left{grid-template-columns:1.15fr .85fr}
+.grid2.wide-right{grid-template-columns:.82fr 1.18fr}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+
+.card{background:var(--paper-2);border:1px solid var(--rule);border-radius:12px;padding:16px 22px}
+.card h3{font-family:var(--serif);font-weight:600;font-size:25px;margin-bottom:6px;color:var(--ink)}
+.card p{font-size:20px;line-height:1.42;color:var(--muted)}
+.card.b{border-left:5px solid var(--blue)} .card.g{border-left:5px solid var(--green)}
+.card.r{border-left:5px solid var(--signal)} .card.p{border-left:5px solid var(--purple)}
+
+ul.list{list-style:none;display:flex;flex-direction:column;gap:12px}
+ul.list li{position:relative;padding-left:36px;font-size:21px;line-height:1.38;color:var(--ink)}
+ul.list li::before{content:"";position:absolute;left:6px;top:9px;width:12px;height:12px;border-radius:3px;
+  background:var(--signal);transform:rotate(45deg)}
+ul.list li b{color:var(--ink);font-weight:600}
+ul.list li .m{color:var(--muted)}
+ul.list.tight{gap:10px}
+ul.list.tight li{font-size:20px;line-height:1.34}
+
+p.para{font-size:21px;line-height:1.45;color:var(--ink);max-width:1400px}
+p.para + p.para{margin-top:12px}
+.muted{color:var(--muted)}
+.kbd,code.inl{font-family:var(--mono);font-size:.92em;background:var(--code-bg);border:1px solid var(--rule);
+  border-radius:5px;padding:2px 8px;color:var(--ink)}
+
+/* code blocks (light, on solid card so glyphs are crisp) */
+.codewrap{background:var(--code-bg);border:1px solid var(--rule-strong);border-radius:12px;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.codebar{display:flex;align-items:center;gap:10px;padding:8px 16px;background:rgba(0,0,0,.05);
+  border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:16px;color:var(--muted)}
+.codebar .dotr{width:11px;height:11px;border-radius:50%;background:var(--signal);opacity:.6}
+.codebar .file{margin-left:auto;color:var(--faint)}
+pre.code{font-family:var(--mono);font-size:17px;line-height:1.44;padding:15px 20px;color:#2a2418;
+  white-space:pre;overflow:hidden;tab-size:2}
+pre.code.sm{font-size:15.5px;line-height:1.4}
+pre.code .c{color:var(--c-com);font-style:italic}
+pre.code .k{color:var(--c-key);font-weight:600}
+pre.code .s{color:var(--c-str)}
+pre.code .n{color:var(--c-num)}
+
+/* annotation / margin note */
+.note{background:#f5ead0;border:1px dashed var(--signal);border-radius:10px;padding:13px 20px;
+  font-size:19px;line-height:1.38;color:var(--ink)}
+.note b{color:var(--signal)}
+.note .tag{font-family:var(--mono);font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--signal);display:block;margin-bottom:4px}
+
+/* key-value / metrics */
+.kpis{display:flex;gap:22px;flex-wrap:wrap}
+.kpi{background:var(--paper-2);border:1px solid var(--rule);border-radius:12px;padding:14px 24px;min-width:170px}
+.kpi .v{font-family:var(--serif);font-weight:700;font-size:44px;color:var(--signal);line-height:1}
+.kpi .v.blue{color:var(--blue)} .kpi .v.green{color:var(--green)}
+.kpi .l{font-size:19px;color:var(--muted);margin-top:6px}
+
+table.tbl{width:100%;border-collapse:collapse;font-size:19px}
+table.tbl th,table.tbl td{text-align:left;padding:9px 15px;border-bottom:1px solid var(--rule)}
+table.tbl th{font-family:var(--mono);font-size:17px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+table.tbl td{color:var(--ink)}
+table.tbl tr:last-child td{border-bottom:none}
+table.tbl .mono{font-family:var(--mono);font-size:18px}
+
+.flow{font-family:var(--mono);font-size:22px;color:var(--muted);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.flow .b{color:var(--ink)} .flow .arr{color:var(--signal)}
+
+/* ---------- COVER ---------- */
+.cover .inner{justify-content:center;padding-left:196px}
+.stamp{align-self:flex-start;font-family:var(--mono);font-size:20px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--signal);border:2px solid var(--signal);border-radius:6px;padding:9px 18px;transform:rotate(-1.6deg)}
+.cover h1{font-family:var(--serif);font-weight:700;font-size:158px;line-height:.92;letter-spacing:-.015em;margin:26px 0 4px}
+.cover h1 .u{color:var(--signal);font-style:italic}
+.cover .field{font-family:var(--mono);font-size:24px;color:var(--muted);margin:6px 0 0}
+.cover .sub{font-size:32px;line-height:1.5;color:var(--muted);max-width:1180px;margin-top:26px;
+  border-left:4px solid var(--rule);padding-left:26px}
+.cover .legend{margin-top:46px;display:flex;gap:40px}
+.cover .leg{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:22px;color:var(--ink)}
+.cover .sw{width:26px;height:14px;border-radius:3px}
+.cover .annot{position:absolute;top:74px;right:88px;width:430px}
+.cover .annot svg{width:100%;height:165px}
+.cover .annot .cap{font-family:var(--mono);font-size:18px;color:var(--faint);text-align:right;margin-top:6px}
+
+/* ---------- DIVIDER ---------- */
+.divider .inner{justify-content:center}
+.divider .part-no{font-family:var(--mono);font-size:30px;letter-spacing:.3em;color:var(--signal)}
+.divider h2{font-size:104px;margin-top:10px;line-height:.98}
+.divider .part-sub{font-size:30px;color:var(--muted);max-width:1200px;margin-top:22px;line-height:1.45}
+.divider .ticks{margin-top:40px;display:flex;gap:14px}
+.divider .tick{font-family:var(--mono);font-size:20px;color:var(--muted);background:var(--paper-2);
+  border:1px solid var(--rule);border-radius:8px;padding:10px 18px}
+
+/* progress + nav chrome (outside-the-page UI uses clamp) */
+.progress{position:fixed;left:0;top:0;height:5px;background:var(--signal);z-index:50;transition:width .35s ease}
+.hud{position:fixed;right:clamp(12px,2vw,28px);bottom:clamp(10px,2vh,22px);z-index:50;
+  font-family:var(--mono);font-size:clamp(11px,1.3vw,15px);color:#5b513a;background:rgba(247,241,228,.85);
+  border:1px solid #c9bb9b;border-radius:999px;padding:6px 14px;backdrop-filter:blur(4px)}
+.hint{position:fixed;left:clamp(12px,2vw,28px);bottom:clamp(10px,2vh,22px);z-index:50;
+  font-family:var(--mono);font-size:clamp(10px,1.2vw,13px);color:#6b6149;opacity:.8}
+
+@media (prefers-reduced-motion:reduce){.slide{transition:none}}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="viewport">
+  <div class="stage" id="stage">
+    <div class="deck" id="deck">
+
+    <!-- =============================================================
+         SLIDE 1 · COVER
+         ============================================================= -->
+    <section class="slide cover active" data-sec="Cover">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="annot">
+            <svg viewBox="0 0 540 210" preserveAspectRatio="none">
+              <path d="M0,105 C40,30 70,180 110,105 C150,30 180,180 220,105 C260,30 290,180 330,105 C370,30 400,180 440,105 C480,55 510,155 540,105"
+                fill="none" stroke="#2b5488" stroke-width="3.5"/>
+            </svg>
+            <div class="cap">fig. 1 · one set · 6 channels · ~8 reps</div>
+          </div>
+          <div class="stamp">Lab Notebook · Vol. 1</div>
+          <div class="field" style="margin-top:30px">PROJECT: wrist-IMU exercise recognition &amp; rep counting</div>
+          <h1>Lift<span class="u">Logger</span><br>From Scratch</h1>
+          <div class="sub">A full teardown of the Apple&nbsp;Watch app I vibe-coded with Claude: the sensors, the data pipeline, the two neural networks, and the on-device deployment, rewritten as a course so I understand every piece.</div>
+          <div class="legend">
+            <span class="leg"><span class="sw" style="background:var(--blue)"></span>capture</span>
+            <span class="leg"><span class="sw" style="background:var(--green)"></span>train</span>
+            <span class="leg"><span class="sw" style="background:var(--signal)"></span>deploy</span>
+          </div>
+        </div>
+        <div class="pageno">01</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 2 · WHAT IT IS + PHILOSOPHY
+         ============================================================= -->
+    <section class="slide" data-sec="Orientation">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">00</span> Orientation <span class="pill">the idea</span></div>
+          <h2>What LiftLogger <span class="hl">is</span></h2>
+          <p class="lede">A watch that watches you lift: it reads your wrist motion, figures out <i>which</i> exercise you're doing, and counts <i>how many</i> reps, entirely on the device with no internet.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <ul class="list">
+                  <li><b>The sensor:</b> the watch's 6-axis IMU (accelerometer + gyroscope) sampled at <code class="inl">50 Hz</code>.</li>
+                  <li><b>Job #1, classify:</b> a 1-D CNN names the lift (chest press, curl, row, and so on) from a 2-second window of motion.</li>
+                  <li><b>Job #2, count:</b> a second model counts reps inside each detected set.</li>
+                  <li><b>Two modes:</b> a <i>manual</i> mode for collecting labeled training data, and an <i>AI auto-detect</i> mode that runs the trained models live.</li>
+                </ul>
+              </div>
+              <div class="col">
+                <div class="note">
+                  <span class="tag">The method behind this course</span>
+                  <b>Build first, understand second.</b> The entire app was "vibe-coded": described in plain English, generated by Claude. That gets you a working product fast. This deck is the second half: going back through every file to convert <i>it works</i> into <i>I know why it works.</i>
+                </div>
+                <div class="card r"><h3>Why this order works</h3><p>You learn fastest with a real, working artifact in front of you. Concrete code to read beats abstract tutorials. The risk is shipping things you can't maintain, and the fix is exactly this: a deliberate read-back pass.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="section-foot">LIFTLOGGER · THE COMPLETE BUILD</div>
+        <div class="pageno">02</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 3 · ARCHITECTURE
+         ============================================================= -->
+    <section class="slide" data-sec="Orientation">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">00</span> Orientation <span class="pill">system map</span></div>
+          <h2>Three tiers, one direction of <span class="hl">data flow</span></h2>
+          <p class="lede">Everything is local peer-to-peer: there is no server and no network call. The watch is the only sensor, the phone is a passive relay, and training happens offline on your Mac.</p>
+          <div class="body" style="display:flex;align-items:center;justify-content:center">
+            <svg viewBox="0 0 1500 470" style="width:100%;max-height:560px">
+              <defs>
+                <marker id="ar" markerWidth="12" markerHeight="12" refX="8" refY="4" orient="auto">
+                  <path d="M0,0 L9,4 L0,8 z" fill="#c0461c"/></marker>
+              </defs>
+              <!-- Watch -->
+              <rect x="30" y="70" width="380" height="330" rx="16" fill="#eef4fb" stroke="#2b5488" stroke-width="2.5"/>
+              <text x="60" y="120" font-family="Fraunces" font-size="34" font-weight="700" fill="#2b5488">Apple Watch</text>
+              <text x="60" y="156" font-family="JetBrains Mono" font-size="19" fill="#6c624a">watchOS · Swift</text>
+              <text x="60" y="206" font-family="Spline Sans" font-size="21" fill="#221c12">• RecorderModel.swift</text>
+              <text x="60" y="242" font-family="Spline Sans" font-size="21" fill="#221c12">• 50 Hz IMU capture</text>
+              <text x="60" y="278" font-family="Spline Sans" font-size="21" fill="#221c12">• state machine + UI</text>
+              <text x="60" y="314" font-family="Spline Sans" font-size="21" fill="#221c12">• on-watch Core ML</text>
+              <text x="60" y="362" font-family="JetBrains Mono" font-size="18" fill="#3f6f3a">writes *_readings.csv</text>
+              <!-- Phone -->
+              <rect x="560" y="70" width="380" height="330" rx="16" fill="#f3eee2" stroke="#6c624a" stroke-width="2.5"/>
+              <text x="590" y="120" font-family="Fraunces" font-size="34" font-weight="700" fill="#221c12">iPhone</text>
+              <text x="590" y="156" font-family="JetBrains Mono" font-size="19" fill="#6c624a">iOS · SwiftUI</text>
+              <text x="590" y="206" font-family="Spline Sans" font-size="21" fill="#221c12">• SessionStore.swift</text>
+              <text x="590" y="242" font-family="Spline Sans" font-size="21" fill="#221c12">• receives + files CSVs</text>
+              <text x="590" y="278" font-family="Spline Sans" font-size="21" fill="#221c12">• rep-tagger (taps)</text>
+              <text x="590" y="314" font-family="Spline Sans" font-size="21" fill="#221c12">• merged export</text>
+              <text x="590" y="362" font-family="JetBrains Mono" font-size="18" fill="#3f6f3a">passive relay + storage</text>
+              <!-- Training -->
+              <rect x="1090" y="70" width="380" height="330" rx="16" fill="#eef5ed" stroke="#3f6f3a" stroke-width="2.5"/>
+              <text x="1120" y="120" font-family="Fraunces" font-size="34" font-weight="700" fill="#3f6f3a">Mac (offline)</text>
+              <text x="1120" y="156" font-family="JetBrains Mono" font-size="19" fill="#6c624a">Python · PyTorch</text>
+              <text x="1120" y="206" font-family="Spline Sans" font-size="21" fill="#221c12">• data → windows</text>
+              <text x="1120" y="242" font-family="Spline Sans" font-size="21" fill="#221c12">• train CNN + reps</text>
+              <text x="1120" y="278" font-family="Spline Sans" font-size="21" fill="#221c12">• export Core ML</text>
+              <text x="1120" y="314" font-family="Spline Sans" font-size="21" fill="#221c12">→ .mlpackage</text>
+              <text x="1120" y="362" font-family="JetBrains Mono" font-size="18" fill="#c0461c">model bundled back ↩</text>
+              <!-- arrows -->
+              <line x1="410" y1="200" x2="555" y2="200" stroke="#c0461c" stroke-width="3" marker-end="url(#ar)"/>
+              <text x="420" y="186" font-family="JetBrains Mono" font-size="17" fill="#c0461c">transferFile()</text>
+              <line x1="940" y1="200" x2="1085" y2="200" stroke="#c0461c" stroke-width="3" marker-end="url(#ar)"/>
+              <text x="952" y="186" font-family="JetBrains Mono" font-size="17" fill="#c0461c">ShareLink export</text>
+              <!-- return arrow -->
+              <path d="M1280,405 C1280,452 470,452 230,452 L230,405" fill="none" stroke="#c0461c" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#ar)"/>
+              <text x="640" y="448" font-family="JetBrains Mono" font-size="18" fill="#c0461c">trained .mlpackage dragged into Xcode → ships on the watch</text>
+            </svg>
+          </div>
+        </div>
+        <div class="pageno">03</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 4 · DATA CONTRACT + THE CLOCK
+         ============================================================= -->
+    <section class="slide" data-sec="Orientation">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">00</span> Orientation <span class="pill">the contract</span></div>
+          <h2>The CSV schemas, and the <span class="hl">one clock</span> that ties them together</h2>
+          <p class="lede">The whole system is glued by two tiny CSV schemas and a single shared timestamp. Get these right and watch, phone, and Python all agree.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>data schemas <span class="file">readings.csv · sets.csv · reps.csv</span></div>
+<pre class="code sm"># readings.csv: one row per IMU sample (50/sec)
+subject,session,time_ms,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z
+
+# sets.csv: one row per completed set
+subject,session,exercise,start_ms,end_ms,reps
+
+# reps.csv: one row per tagged rep (ground truth)
+subject,session,rep_time_ms,set_start_ms,tap_unix_ms</pre></div>
+                <ul class="list tight">
+                  <li><b>subject</b> = who (e.g. <code class="inl">S01</code>). <b>session</b> = a timestamp ID. Together they namespace every row.</li>
+                  <li><b>A reading belongs to a set</b> iff <code class="inl">start_ms &le; time_ms &le; end_ms</code> in the same subject+session. That join is the entire labeling step.</li>
+                </ul>
+              </div>
+              <div class="col">
+                <div class="note">
+                  <span class="tag">The key decision</span>
+                  Every timestamp, both IMU samples <i>and</i> set-boundary taps, uses the watch's <b>time-since-boot</b> clock (<code class="inl">CMDeviceMotion.timestamp</code> = <code class="inl">ProcessInfo.systemUptime</code>). One clock means samples and boundaries are guaranteed to line up, so labeling is just a numeric comparison.
+                </div>
+                <div class="card r"><h3>Why not wall-clock time?</h3><p>Wall-clock (Date) can jump (NTP sync, timezone, DST). Uptime is monotonic and identical for both the sensor stream and the button taps because they're captured on the same device. The phone's wall-clock taps get <i>converted</i> onto this clock later (slide 16).</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">04</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 5 · TECH STACK
+         ============================================================= -->
+    <section class="slide" data-sec="Orientation">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">00</span> Orientation <span class="pill">tools</span></div>
+          <h2>The stack, and what each piece is <span class="hl">for</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="card b"><h3>On-device · Swift / Apple</h3>
+                  <table class="tbl">
+                    <tr><td class="mono">SwiftUI</td><td>UI for both watch &amp; phone</td></tr>
+                    <tr><td class="mono">CoreMotion</td><td><code class="inl">CMMotionManager</code>, the 50 Hz IMU</td></tr>
+                    <tr><td class="mono">WatchConnectivity</td><td><code class="inl">WCSession</code>, watch ⇄ phone transport</td></tr>
+                    <tr><td class="mono">WatchKit</td><td>haptics (<code class="inl">.start/.stop/.success</code>)</td></tr>
+                    <tr><td class="mono">Core ML</td><td>runs the exported models on-watch</td></tr>
+                    <tr><td class="mono">Combine</td><td><code class="inl">@Published</code> reactive state</td></tr>
+                  </table>
+                </div>
+              </div>
+              <div class="col">
+                <div class="card g"><h3>Offline · Python / ML</h3>
+                  <table class="tbl">
+                    <tr><td class="mono">PyTorch</td><td>defines &amp; trains both CNNs</td></tr>
+                    <tr><td class="mono">scikit-learn</td><td>RF baseline + grouped splits</td></tr>
+                    <tr><td class="mono">coremltools</td><td>PyTorch → <code class="inl">.mlpackage</code></td></tr>
+                    <tr><td class="mono">numpy / pandas</td><td>CSV loading, windowing, norm stats</td></tr>
+                  </table>
+                </div>
+                <div class="note"><span class="tag">What is not here</span>No backend, no database, no cloud ML, no auth server. For a single-user data-collection tool, on-device plus local files is the whole infrastructure, which is far simpler.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">05</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         DIVIDER · PART I
+         ============================================================= -->
+    <section class="slide divider" data-sec="Part I">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="part-no">PART I</div>
+          <h2>The Watch:<br><span class="hl">capturing motion</span></h2>
+          <div class="part-sub">How raw wrist movement becomes clean, labeled CSV at 50 samples a second, without the app being killed, without losing data, and without smearing the labels.</div>
+          <div class="ticks"><span class="tick">state machine</span><span class="tick">CoreMotion @ 50 Hz</span><span class="tick">threading</span><span class="tick">crash-safe I/O</span><span class="tick">set lifecycle</span></div>
+        </div>
+        <div class="pageno">06</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 7 · PHASE STATE MACHINE
+         ============================================================= -->
+    <section class="slide" data-sec="Part I · Capture">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">I</span> Capture <span class="pill">RecorderModel.swift</span></div>
+          <h2>Everything is a <span class="hl">state machine</span></h2>
+          <p class="lede">A single <code class="inl">Phase</code> enum drives the entire watch UI and recording logic. Illegal transitions become impossible: you can't end a set you never started.</p>
+          <div class="body">
+            <div class="grid2 wide-right">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>the one enum that runs the app</div>
+<pre class="code">enum Phase { case idle, resting, countdown,
+  inSet, enteringReps, autoDetecting }
+
+@Published var phase: Phase = .idle</pre></div>
+                <div class="note"><span class="tag">Pattern</span>The view is a <code class="inl">switch model.phase</code>. <b>State lives in one place</b>, and the UI is a pure function of it. This models a multi-screen flow in SwiftUI with one source of truth.</div>
+              </div>
+              <div class="col">
+                <svg viewBox="0 0 720 470" style="width:100%">
+                  <defs><marker id="ar2" markerWidth="11" markerHeight="11" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6c624a"/></marker></defs>
+                  <g font-family="JetBrains Mono" font-size="20">
+                  <rect x="40" y="20" width="180" height="56" rx="10" fill="#f3eee2" stroke="#6c624a" stroke-width="2"/><text x="130" y="55" text-anchor="middle" fill="#221c12">idle</text>
+                  <rect x="270" y="20" width="200" height="56" rx="10" fill="#eef4fb" stroke="#2b5488" stroke-width="2"/><text x="370" y="55" text-anchor="middle" fill="#2b5488">resting</text>
+                  <rect x="270" y="140" width="200" height="56" rx="10" fill="#eef4fb" stroke="#2b5488" stroke-width="2"/><text x="370" y="175" text-anchor="middle" fill="#2b5488">countdown</text>
+                  <rect x="270" y="260" width="200" height="56" rx="10" fill="#eef4fb" stroke="#2b5488" stroke-width="2"/><text x="370" y="295" text-anchor="middle" fill="#2b5488">inSet</text>
+                  <rect x="270" y="380" width="200" height="56" rx="10" fill="#f5ead0" stroke="#c0461c" stroke-width="2"/><text x="370" y="415" text-anchor="middle" fill="#c0461c">enteringReps</text>
+                  <rect x="520" y="20" width="170" height="56" rx="10" fill="#eef5ed" stroke="#3f6f3a" stroke-width="2"/><text x="605" y="48" text-anchor="middle" fill="#3f6f3a" font-size="17">autoDetecting</text>
+                  <text x="605" y="67" text-anchor="middle" fill="#3f6f3a" font-size="14">(AI mode)</text>
+                  <line x1="220" y1="48" x2="265" y2="48" stroke="#6c624a" stroke-width="2" marker-end="url(#ar2)"/>
+                  <line x1="470" y1="48" x2="515" y2="48" stroke="#6c624a" stroke-width="2" marker-end="url(#ar2)"/>
+                  <line x1="370" y1="76" x2="370" y2="136" stroke="#6c624a" stroke-width="2" marker-end="url(#ar2)"/>
+                  <line x1="370" y1="196" x2="370" y2="256" stroke="#6c624a" stroke-width="2" marker-end="url(#ar2)"/>
+                  <line x1="370" y1="316" x2="370" y2="376" stroke="#6c624a" stroke-width="2" marker-end="url(#ar2)"/>
+                  <path d="M270,408 C150,408 150,60 265,52" fill="none" stroke="#6c624a" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#ar2)"/>
+                  <text x="486" y="170" font-size="15" fill="#6c624a">tap exercise</text>
+                  <text x="486" y="290" font-size="15" fill="#6c624a">3·2·1 done</text>
+                  <text x="486" y="410" font-size="15" fill="#6c624a">End Set</text>
+                  <text x="120" y="250" font-size="15" fill="#6c624a">Save → resting</text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">07</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 8 · IMU @ 50Hz + THREADING
+         ============================================================= -->
+    <section class="slide" data-sec="Part I · Capture">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">I</span> Capture <span class="pill">CoreMotion + threading</span></div>
+          <h2>Reading the IMU at 50 Hz, on the <span class="hl">right thread</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>startMotion()</div>
+<pre class="code sm">motion.deviceMotionUpdateInterval = 1.0 / 50.0
+motion.startDeviceMotionUpdates(to: workQueue) {
+  [weak self] dm, _ in
+  guard let self, let dm else { return }
+  let tms = dm.timestamp * 1000.0
+  // … build CSV row, append to lineBuffer …
+}</pre></div>
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>the dedicated serial queue</div>
+<pre class="code sm">let workQueue: OperationQueue = {
+  let q = OperationQueue()
+  q.maxConcurrentOperationCount = 1   // serial!
+  q.name = "liftlogger.recorder"
+  return q
+}()</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list">
+                  <li><b>Why 50 Hz?</b> Lifting motion lives below about 5-10 Hz. 50 Hz gives Nyquist headroom, capturing the shape of every rep without flooding storage. It must match <code class="inl">config.FS</code> in Python exactly.</li>
+                  <li><b>One serial queue for all I/O.</b> Sensor callbacks <i>and</i> file writes run here, single-file. No locks and no data races on the buffer, since ordering is guaranteed by the queue.</li>
+                  <li><b>UI stays on main.</b> Every <code class="inl">@Published</code> change is hopped back with <code class="inl">DispatchQueue.main.async</code>. Sensor work never blocks the screen.</li>
+                </ul>
+                <div class="note"><span class="tag">Concurrency rule</span>Heavy/continuous work off the main thread; published state mutated only on main. This split is why the watch UI never stutters at 50 callbacks/second.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">08</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 9 · CHANNELS + GRAVITY DECISION
+         ============================================================= -->
+    <section class="slide" data-sec="Part I · Capture">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">I</span> Capture <span class="pill">the 6 channels</span></div>
+          <h2>What we record, and the <span class="hl">gravity</span> decision</h2>
+          <p class="lede">Six channels per sample: 3 acceleration + 3 rotation. The subtle, important choice is including gravity in the acceleration.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>per-sample channel build</div>
+<pre class="code sm">// total accel INCLUDING gravity: gravity encodes
+// arm orientation, which helps separate exercises.
+let ax = dm.userAcceleration.x + dm.gravity.x
+let ay = dm.userAcceleration.y + dm.gravity.y
+let az = dm.userAcceleration.z + dm.gravity.z
+let r  = dm.rotationRate            // rad/s, gyro</pre></div>
+                <p class="para">CoreMotion gives <code class="inl">userAcceleration</code> (gravity already removed) and <code class="inl">gravity</code> separately. Adding them back yields <i>raw</i> total acceleration.</p>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">Why add gravity back?</span>The <b>direction of gravity</b> in the watch frame tells you how the arm is oriented. A shoulder press (arm overhead) and a curl (arm down) look very different in the gravity vector even at the same motion, so orientation is useful signal you get for free.</div>
+                <div class="card r"><h3>The one rule</h3><p>Whatever you choose here, <b>be consistent forever</b>: every recording, for both training and inference, must use the identical channel definition and order (<code class="inl">acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z</code>). The model learns the exact signal you feed it.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">09</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 10 · CSV WRITING + CRASH SAFETY
+         ============================================================= -->
+    <section class="slide" data-sec="Part I · Capture">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">I</span> Capture <span class="pill">durable I/O</span></div>
+          <h2>Writing CSV so a crash costs <span class="hl">≤ 1 second</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>buffer then flush</div>
+<pre class="code sm">private var lineBuffer: [String] = []
+private let flushEvery = 50          // ~1 s @ 50 Hz
+
+// in the sensor callback:
+self.lineBuffer.append(line)
+if self.lineBuffer.count >= self.flushEvery {
+  self.flushReadings()
+}
+
+// flushReadings(): join buffer, one write to FileHandle,
+// clear buffer. Runs on workQueue only.</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list">
+                  <li><b>Append to a buffer, write in batches.</b> Writing every single sample to disk 50×/sec is wasteful; batching ~1 s of lines into one <code class="inl">FileHandle.write</code> is far cheaper.</li>
+                  <li><b>The trade-off is data loss.</b> A bigger buffer means fewer writes but more lost on a crash. 50 lines caps loss at about 1 second, a deliberate balance.</li>
+                  <li><b>Open with headers up front.</b> <code class="inl">openFiles()</code> writes the CSV header, then keeps a <code class="inl">FileHandle</code> seeked to end for the whole session.</li>
+                  <li><b>End-of-session ordering.</b> The final flush + file transfer is <i>queued behind</i> all writes on the serial queue, so it only runs once every sample is on disk.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">10</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 11 · SET LIFECYCLE + HAPTICS
+         ============================================================= -->
+    <section class="slide" data-sec="Part I · Capture">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">I</span> Capture <span class="pill">set lifecycle</span></div>
+          <h2>One set, start to finish, and why each step <span class="hl">exists</span></h2>
+          <div class="body" style="margin-top:14px">
+            <div class="flow" style="margin-bottom:22px">
+              <span class="b">tap exercise</span><span class="arr">→</span><span class="b">3·2·1 countdown</span><span class="arr">→</span><span class="b">inSet (timer)</span><span class="arr">→</span><span class="b">End Set</span><span class="arr">→</span><span class="b">enter reps</span><span class="arr">→</span><span class="b">Save</span>
+            </div>
+            <div class="grid2">
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>3·2·1 countdown</b> before the window opens (<code class="inl">startSet → beginSetRecording</code>): gives you time to get into position so the <i>front</i> of every set is clean motion, not reaching for a button.</li>
+                  <li><b>Rep entry screen</b> after End Set: you dial in the true rep count (<code class="inl">±</code> buttons). This becomes ground-truth in <code class="inl">sets.csv</code>.</li>
+                  <li><b>Discard last set:</b> marks a botched set as <code class="inl">"discard"</code>: its data stays but training drops it (slide 20).</li>
+                </ul>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">Haptics as a UI language</span>The wrist can't be watched mid-lift, so feedback is felt: <code class="inl">.click</code> per countdown tick, <code class="inl">.start</code> when recording opens, <code class="inl">.stop</code> on End Set, <code class="inl">.success</code> on save, <code class="inl">.failure</code> on cancel/discard. You operate it blind.</div>
+                <div class="card b"><h3>Boundary trimming starts here</h3><p>Because the countdown guarantees a clean start, the Python side sets <code class="inl">TRIM_START_SEC = 0</code> but still trims the <i>end</i> (wind-down before you tap). UI design and data cleaning are co-designed.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">11</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         DIVIDER · PART II
+         ============================================================= -->
+    <section class="slide divider" data-sec="Part II">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="part-no">PART II</div>
+          <h2>Watch ⇄ Phone:<br><span class="hl">moving the data</span></h2>
+          <div class="part-sub">Getting files off the watch reliably, filing them on the phone, and a two-device handshake to capture per-rep ground truth, all over a flaky, intermittent local link.</div>
+          <div class="ticks"><span class="tick">WatchConnectivity</span><span class="tick">file transfer</span><span class="tick">live messages</span><span class="tick">clock anchoring</span></div>
+        </div>
+        <div class="pageno">12</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 13 · WATCHCONNECTIVITY TRANSFER
+         ============================================================= -->
+    <section class="slide" data-sec="Part II · Data flow">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">II</span> Data flow <span class="pill">WCSession</span></div>
+          <h2>Getting files off the watch with <span class="hl">transferFile()</span></h2>
+          <p class="lede">WatchConnectivity offers several channels. For finished CSVs, <code class="inl">transferFile</code> is the right one: a background queue that survives the app being suspended or quit.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>endSession() → transfer</div>
+<pre class="code sm">WCSession.default.transferFile(
+  readingsURL,
+  metadata: ["kind": "readings",
+             "session": sid,
+             "subject": subj])
+// …and again for sets.csv</pre></div>
+                <table class="tbl">
+                  <tr><th>channel</th><th>use</th></tr>
+                  <tr><td class="mono">transferFile</td><td>big files, background, durable ✓</td></tr>
+                  <tr><td class="mono">sendMessage</td><td>tiny, live, both apps awake</td></tr>
+                  <tr><td class="mono">applicationContext</td><td>latest-value sync (subject ID)</td></tr>
+                </table>
+              </div>
+              <div class="col">
+                <ul class="list">
+                  <li><b>Metadata rides along.</b> Each transfer carries <code class="inl">kind</code>, <code class="inl">session</code>, and <code class="inl">subject</code> so the phone can file it correctly without parsing the filename.</li>
+                  <li><b>Survives termination.</b> The OS keeps the transfer queue, so you can end the session and pocket the watch, and it delivers when the phone is reachable.</li>
+                  <li><b>Best-effort by design.</b> If the phone is out of range, files stay on the watch as "pending" for a manual <i>Resend</i>.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">13</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 14 · iPHONE RELAY didReceive
+         ============================================================= -->
+    <section class="slide" data-sec="Part II · Data flow">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">II</span> Data flow <span class="pill">SessionStore.swift</span></div>
+          <h2>The phone side: receive, then <span class="hl">move immediately</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>didReceive file: the critical move</div>
+<pre class="code sm">func session(_ s: WCSession,
+             didReceive file: WCSessionFile) {
+  let kind = file.metadata?["kind"] ?? "data"
+  let sid  = file.metadata?["session"] ?? "unknown"
+  let dir  = folderFor(sessionID: sid)
+  let dest = dir.appendingPathComponent("\(kind).csv")
+  try? fm.removeItem(at: dest)            // overwrite
+  try? fm.moveItem(at: file.fileURL, to: dest)
+  refresh()
+}</pre></div>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">The non-obvious gotcha</span>The system <b>deletes <code class="inl">file.fileURL</code> the instant this method returns.</b> The move must happen <i>synchronously</i>, right here, with no async hop, or the file is gone.</div>
+                <ul class="list tight">
+                  <li><b>Cosmetic folders, durable IDs.</b> Files are filed under a human date like <code class="inl">Jun-10</code>, but a hidden <code class="inl">.sid</code> marker stores the real session timestamp.</li>
+                  <li><b>That marker is the glue:</b> readings, sets, and reps from one session always reunite in the same folder, and the list sorts by the real timestamp, not the pretty name.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">14</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 15 · LIVE REP TAGGING DANCE
+         ============================================================= -->
+    <section class="slide" data-sec="Part II · Data flow">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">II</span> Data flow <span class="pill">two-device coordination</span></div>
+          <h2>The rep-tagger: a live <span class="hl">two-device handshake</span></h2>
+          <p class="lede">To train a <i>supervised</i> rep counter you need to know exactly when each rep happened. The approach: a helper holds the phone and taps once per rep while you lift, and the watch tells the phone when to listen.</p>
+          <div class="body">
+            <div class="grid2 wide-right">
+              <div class="col">
+                <ul class="list tight">
+                  <li><code class="inl">session_start</code> → phone opens <code class="inl">reps.csv</code> + stores the clock anchor.</li>
+                  <li><code class="inl">set_start</code> → phone "arms" the big TAP button.</li>
+                  <li><b>each tap</b> → one rep timestamp written.</li>
+                  <li><code class="inl">set_end</code> → button disarms.</li>
+                  <li><code class="inl">session_end</code> → phone closes &amp; files <code class="inl">reps.csv</code>.</li>
+                </ul>
+                <div class="note"><span class="tag">Channel choice</span>This uses <code class="inl">sendMessage</code> (not file transfer): it's tiny and live, exactly what real-time coordination needs. It is best-effort, so if the phone app is closed, recording continues fine and you just don't get rep tags that session.</div>
+              </div>
+              <div class="col">
+                <svg viewBox="0 0 600 430" style="width:100%">
+                  <g font-family="JetBrains Mono" font-size="18">
+                  <line x1="150" y1="40" x2="150" y2="410" stroke="#2b5488" stroke-width="2"/>
+                  <line x1="450" y1="40" x2="450" y2="410" stroke="#c0461c" stroke-width="2"/>
+                  <text x="150" y="28" text-anchor="middle" fill="#2b5488" font-size="20">WATCH</text>
+                  <text x="450" y="28" text-anchor="middle" fill="#c0461c" font-size="20">PHONE</text>
+                  <g fill="#6c624a">
+                  <line x1="150" y1="80" x2="448" y2="80" stroke="#6c624a" stroke-width="1.5" marker-end="url(#ar)"/><text x="300" y="72" text-anchor="middle">session_start +anchor</text>
+                  <line x1="150" y1="150" x2="448" y2="150" stroke="#6c624a" stroke-width="1.5" marker-end="url(#ar)"/><text x="300" y="142" text-anchor="middle">set_start</text>
+                  <circle cx="450" cy="200" r="6" fill="#3f6f3a"/><circle cx="450" cy="225" r="6" fill="#3f6f3a"/><circle cx="450" cy="250" r="6" fill="#3f6f3a"/>
+                  <text x="540" y="230" text-anchor="middle" fill="#3f6f3a" font-size="15">tap·tap·tap</text>
+                  <line x1="150" y1="300" x2="448" y2="300" stroke="#6c624a" stroke-width="1.5" marker-end="url(#ar)"/><text x="300" y="292" text-anchor="middle">set_end</text>
+                  <line x1="150" y1="370" x2="448" y2="370" stroke="#6c624a" stroke-width="1.5" marker-end="url(#ar)"/><text x="300" y="362" text-anchor="middle">session_end</text>
+                  </g></g>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">15</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 16 · CLOCK ANCHOR MATH
+         ============================================================= -->
+    <section class="slide" data-sec="Part II · Data flow">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">II</span> Data flow <span class="pill">cross-device time</span></div>
+          <h2>Two devices, two clocks, one <span class="hl">anchor</span></h2>
+          <p class="lede">The phone tap happens in <i>phone wall-clock</i> time, but the IMU lives in <i>watch uptime</i>. To place a tap on the sensor timeline we convert between them with a single calibration point.</p>
+          <div class="body">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>watch captures both clocks together</div>
+<pre class="code sm">// at session_start, sent to phone:
+"anchorUptimeMs": systemUptime * 1000,   // watch clock
+"anchorUnixMs":   Date()...* 1000        // wall clock</pre></div>
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>phone maps each tap onto the IMU clock</div>
+<pre class="code sm">let tapUnixMs = Date()...* 1000
+let repTimeMs = anchorUptimeMs
+              + (tapUnixMs - anchorUnixMs)
+// repTimeMs now matches readings.csv time_ms</pre></div>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">The insight</span>Capture both clocks <b>at the same instant once</b> (the anchor). Their <i>difference</i> is the offset between the devices. Add that offset to any later phone timestamp and you've translated it into watch-uptime, the same axis the IMU samples live on.</div>
+                <div class="card p"><h3>Why it's "good enough"</h3><p>It assumes the two clocks tick at the same rate over a short session (true to well under a rep's width). Rep labels only need ~tens-of-ms accuracy, and the density model later smooths each rep with a Gaussian anyway.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">16</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         DIVIDER · PART III
+         ============================================================= -->
+    <section class="slide divider" data-sec="Part III">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="part-no">PART III</div>
+          <h2>The Training Pipeline:<br><span class="hl">CSV to classifier</span></h2>
+          <div class="part-sub">Eight small Python files turn raw recordings into a trained, validated exercise classifier. This is where most of the real machine-learning thinking lives.</div>
+          <div class="ticks"><span class="tick">labeling</span><span class="tick">windowing</span><span class="tick">subject splits</span><span class="tick">1-D CNN</span><span class="tick">metrics</span></div>
+        </div>
+        <div class="pageno">17</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 18 · config.py
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">config.py</span></div>
+          <h2>One config file is the <span class="hl">single source of truth</span></h2>
+          <p class="lede">Every tunable constant lives in <code class="inl">config.py</code> so data, model, export, and the <i>watch</i> all stay in sync. Several of these values are duplicated in Swift and <b>must match</b>.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>the knobs that matter</div>
+<pre class="code sm">FS = 50                 # Hz, MUST match the watch
+CHANNELS = ["acc_x","acc_y","acc_z",
+            "gyro_x","gyro_y","gyro_z"]
+WINDOW = int(2.0 * FS)  # 100 samples = 2 s window
+STRIDE = WINDOW // 2    # 50% overlap
+LABEL_PURITY = 0.80     # a window must be 80% one label
+REST_LABEL = "rest"     # idle class (reserved word)
+DISCARD_LABEL = "discard"
+TRIM_START_SEC = 0.0    # countdown made starts clean
+TRIM_END_SEC  = 1.0     # trim the wind-down</pre></div>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">Coupling alert</span><code class="inl">FS</code>, <code class="inl">WINDOW</code>, <code class="inl">CHANNELS</code> order, and the reserved labels appear <b>both here and in <code class="inl">RecorderModel.swift</code></b>. Change one, change both, or inference silently breaks. (We return to this "sync tax" on slide 40.)</div>
+                <ul class="list tight">
+                  <li><b>2-second window</b> ≈ one to two reps, enough motion to recognize the exercise and short enough to react quickly.</li>
+                  <li><b>50% overlap</b> doubles training windows and means a set boundary never falls <i>between</i> windows.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">18</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 19 · SYNTHETIC DATA + HONEST METRICS
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">make_synthetic.py</span></div>
+          <h2>Fake data first, and <span class="hl">honesty</span> about what it proves</h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <p class="para">Before any real recording exists, <code class="inl">make_synthetic.py</code> fabricates <code class="inl">readings.csv</code> + <code class="inl">sets.csv</code> in the exact watch schema. Each fake exercise is a distinct sine wave, so the whole pipeline (windowing, training, Core ML export) can run <i>today</i>.</p>
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>each exercise = a unique frequency</div>
+<pre class="code sm">PERIOD = {"bicep_curl":1.2, "shoulder_press":1.6,
+          "lateral_raise":1.5, "chest_press":1.7, …}
+sig = bias + amp*np.sin(2*np.pi*f*t + phase) + noise
+sig[:, 2] += 1.0          # gravity offset on acc_z</pre></div>
+              </div>
+              <div class="col">
+                <div class="kpis"><div class="kpi"><div class="v">0.995</div><div class="l">synthetic accuracy</div></div><div class="kpi"><div class="v green">100%</div><div class="l">plumbing works</div></div></div>
+                <div class="note"><span class="tag">Critical mindset</span>That near-perfect score <b>proves the pipeline runs, not that the model is good.</b> Trivially separable sine waves are not real wrist motion. Mistaking synthetic accuracy for real performance is the classic beginner trap, and the code comments call it out explicitly.</div>
+                <div class="card g"><h3>The right next step</h3><p>Collect real IMU from multiple people, replace the CSVs, and retrain. The architecture doesn't change; only the data does, and data is what moves real-world accuracy.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">19</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 20 · LABELING
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">data.py · label_samples</span></div>
+          <h2>Step 1: label every sample by <span class="hl">interval join</span></h2>
+          <p class="lede">Each reading starts as <code class="inl">rest</code>. Then for every set interval, the readings whose <code class="inl">time_ms</code> fall inside it get that exercise's label. Pure timestamp arithmetic, which is what the shared clock buys you.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>the join + the trim + discard override</div>
+<pre class="code sm">labels[:] = REST_LABEL
+for row in ordered:            # real sets, then discards
+  if row.exercise == DISCARD_LABEL:
+    inside = (t >= start) &amp; (t <= end)   # no trim
+  else:
+    if end-start > trim_total:           # shrink edges
+      start, end = start+trimF, end-trimE
+    inside = (t >= start) &amp; (t <= end)
+  labels[inside] = row.exercise</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Trim the edges.</b> Button-press setup &amp; wind-down motion at a set's boundaries would teach the model junk, so the interval is shrunk before labeling, and that motion stays <code class="inl">rest</code>.</li>
+                  <li><b>Discards win.</b> Bad sets are applied <i>last</i> and override any label, so the next step can drop every window touching them.</li>
+                  <li><b>Keep short sets whole.</b> Trimming is skipped if a set is too short to survive it.</li>
+                </ul>
+                <div class="note"><span class="tag">Data cleaning = accuracy</span>How carefully you define "what counts as the exercise" matters as much as the model. Garbage labels cap your ceiling no matter how good the net is.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">20</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 21 · WINDOWING
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">data.py · make_windows</span></div>
+          <h2>Step 2: slice into windows with a <span class="hl">purity gate</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>sliding window + majority label</div>
+<pre class="code sm">for start in range(0, len(grp)-W+1, S):
+  wl = lab[start:start+W]
+  if (wl == DISCARD_LABEL).any():
+    continue                  # touches a bad set → drop
+  vals, counts = np.unique(wl, return_counts=True)
+  j = counts.argmax()
+  if counts[j]/W < LABEL_PURITY:
+    continue                  # too mixed → drop
+  Xs.append(arr[start:start+W]); names.append(vals[j])</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list">
+                  <li><b>Windows, not raw samples.</b> The model classifies a 100-sample (2 s) chunk, enough context to see a rep's shape. The label is the <i>majority</i> label in the window.</li>
+                  <li><b>The 80% purity gate</b> throws away windows that straddle a boundary (half rest, half exercise), since they're ambiguous and would confuse training.</li>
+                  <li><b>Windows never cross sessions.</b> Slicing happens inside each <code class="inl">(subject, session)</code> group, so a window is always one continuous recording.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">21</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 22 · SUBJECT SPLIT
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">the most important slide</span></div>
+          <h2>Step 3: split by <span class="hl">subject</span>, not by window</h2>
+          <p class="lede">This single choice decides whether your accuracy number is honest. The question that matters is "how well does it do on a <i>person it has never seen</i>?"</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>GroupShuffleSplit on subject</div>
+<pre class="code sm">if n_subj >= 3:
+  groups = ds.groups          # = subject per window
+else:
+  print("[warn] window split: optimistic")
+  groups = np.arange(len(ds.y))
+# no subject appears in both train AND test
+GroupShuffleSplit(test_size=TEST_FRACTION, …)
+   .split(idx, ds.y, groups)</pre></div>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">The leakage trap</span>If you split <i>windows</i> randomly, near-identical windows from the <b>same set</b> land in both train and test. The model "memorizes" that person and reports an inflated accuracy that won't hold up. Grouping by subject prevents this.</div>
+                <ul class="list tight">
+                  <li><b>Cross-subject = the real test.</b> A new user is the biggest source of error in activity recognition.</li>
+                  <li><b>It warns when it can't.</b> With fewer than 3 subjects there's no way to hold one out, so it falls back to window-split and explicitly prints that the numbers are optimistic.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">22</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 23 · NORMALIZATION
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">compute_norm</span></div>
+          <h2>Normalize per-channel, from <span class="hl">train only</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>mean/std over (windows × time)</div>
+<pre class="code sm">flat = X.reshape(-1, X.shape[-1])   # (N*W, C)
+mean = flat.mean(axis=0)
+std  = flat.std(axis=0) + 1e-6      # avoid /0
+
+# IMPORTANT: stats come from the TRAIN split only:
+mean, std = compute_norm(ds.X[tr])</pre></div>
+                <p class="para">Each of the 6 channels gets its own mean &amp; std, then every window is <code class="inl">(x - mean) / std</code>. This puts gyro (rad/s) and accel (g) on a comparable scale so neither dominates.</p>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">No-leakage rule</span>Statistics are computed on <b>training data only</b>, then applied to val/test. Computing them over the full dataset would leak test-set information into training, a subtle but real form of cheating.</div>
+                <div class="card r"><h3>These stats travel with the model</h3><p>The exact <code class="inl">mean</code>/<code class="inl">std</code> are saved to <code class="inl">norm.npz</code> and later <b>baked into the Core ML model</b> (slide 34), so the watch feeds raw sensor values and the model normalizes them identically. No risk of a mismatch.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">23</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 24 · CNN ARCHITECTURE
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">models.py · CNN1D</span></div>
+          <h2>The model: a compact <span class="hl">1-D CNN</span></h2>
+          <div class="body" style="margin-top:14px">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>~150k params, ends in global pooling</div>
+<pre class="code sm">Conv1d(6→64, k=7) → BN → ReLU → MaxPool
+Conv1d(64→128,k=5) → BN → ReLU → MaxPool
+Conv1d(128→128,k=3)→ BN → ReLU
+AdaptiveAvgPool1d(1)          # collapse time
+Flatten → Dropout(0.3) → Linear(128 → n_classes)</pre></div>
+                <p class="para">Input is <code class="inl">(batch, 6 channels, 100 time)</code>; output is one logit per exercise class.</p>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>1-D convolutions</b> slide along <i>time</i>, learning local motion motifs (the up-down of a rep) regardless of where in the window they start. This is <b>translation invariance.</b></li>
+                  <li><b>Global average pooling</b> over time means the window length and rep phase don't matter, and it keeps the parameter count tiny (about 150k), which suits a watch.</li>
+                  <li><b>BatchNorm + Dropout</b> stabilize and regularize on a small dataset.</li>
+                </ul>
+                <div class="note"><span class="tag">Why small is right here</span>Tiny dataset + tiny compute (Apple Watch Neural Engine) ⇒ a small model that generalizes beats a big one. Capacity you can't feed just overfits.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">24</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 25 · MODEL BAKE-OFF
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">why this model</span></div>
+          <h2>The model bake-off, best to worst <span class="hl">for this problem</span></h2>
+          <p class="lede">Constraints decide the winner: 6-channel IMU @ 50 Hz, short periodic windows, a small hand-collected dataset, eventually 20-30 classes, inference on a watch.</p>
+          <div class="body" style="margin-top:8px">
+            <table class="tbl">
+              <tr><th>approach</th><th>verdict</th><th>why</th></tr>
+              <tr><td class="mono">1-D CNN</td><td style="color:var(--green);font-weight:600">SHIPS ✓</td><td>translation-invariant, small, Neural-Engine-friendly, clean Core ML path</td></tr>
+              <tr><td class="mono">Random Forest</td><td style="color:var(--green)">baseline</td><td>hard to beat on small data; but features must be re-coded in Swift to deploy</td></tr>
+              <tr><td class="mono">CNN + GRU / TCN</td><td style="color:var(--blue)">later</td><td>+1-3% with lots of data; bigger, fiddlier to convert</td></tr>
+              <tr><td class="mono">Plain MLP</td><td style="color:var(--muted)">meh</td><td>throws away time structure; brittle</td></tr>
+              <tr><td class="mono">Transformer</td><td style="color:var(--signal)">avoid (now)</td><td>data-hungry, overfits on hundreds of windows, heaviest on-watch</td></tr>
+              <tr><td class="mono">k-NN + DTW</td><td style="color:var(--signal)">avoid</td><td>O(N) per prediction, no Core ML path, can't live on a watch</td></tr>
+            </table>
+            <div class="note" style="margin-top:18px"><span class="tag">The lesson</span><b>Pick the model the constraints choose, not the trendiest one.</b> "What runs well on the target device with the data I actually have?" beats "what's state-of-the-art?" almost every time on embedded ML.</div>
+          </div>
+        </div>
+        <div class="pageno">25</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 26 · TRAINING LOOP
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">train.py</span></div>
+          <h2>The training loop, small but <span class="hl">correct</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>class weights + early stopping on macro-F1</div>
+<pre class="code sm"># counter class imbalance (rest dominates)
+w = counts.sum() / (counts + 1e-6)
+criterion = CrossEntropyLoss(weight = w / w.mean())
+
+# keep the epoch with the best VALIDATION macro-F1
+if val_f1 > best_f1:
+  best_state = clone(model.state_dict())
+if patience >= EARLY_STOP_PATIENCE: break</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Class weights.</b> <code class="inl">rest</code> hugely outnumbers any exercise; weighting the loss by inverse frequency stops the model from just predicting "rest" to win accuracy.</li>
+                  <li><b>Macro-F1, not accuracy,</b> picks the best epoch; it averages per-class, so a rare class can't be ignored.</li>
+                  <li><b>Early stopping</b> restores the best checkpoint when val stops improving, an automatic, leak-free form of regularization.</li>
+                  <li><b>Runs on Apple <code class="inl">mps</code></b> if available, else CPU; <code class="inl">drop_last</code> avoids a 1-sample batch breaking BatchNorm.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">26</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 27 · READING METRICS
+         ============================================================= -->
+    <section class="slide" data-sec="Part III · Training">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">III</span> Training <span class="pill">metrics.txt</span></div>
+          <h2>Reading the results <span class="hl">honestly</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>confusion matrix (synthetic run)</div>
+<pre class="code sm">                prec  recall    f1
+  bent_over_row 0.950  1.000  0.974
+     bicep_curl 1.000  1.000  1.000
+    chest_press 1.000  1.000  1.000
+           rest 1.000  0.975  0.987
+ shoulder_press 1.000  1.000  1.000
+       accuracy               0.995</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Accuracy alone misleads</b> under class imbalance, so always read it next to <b>macro-F1</b> and the <b>per-class</b> report.</li>
+                  <li><b>The confusion matrix is the map.</b> Off-diagonal cells tell you <i>which</i> exercises blur together (mechanically similar moves like bicep vs. hammer curl), pointing exactly where to collect more data.</li>
+                  <li><b>Per-class support</b> shows how many test windows backed each number; a 1.000 on 3 samples is noise.</li>
+                </ul>
+                <div class="note"><span class="tag">Reminder</span>This perfect matrix is the <i>synthetic</i> data. On real recordings the diagonal won't be this clean, and that's where the learning starts.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">27</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         DIVIDER · PART IV
+         ============================================================= -->
+    <section class="slide divider" data-sec="Part IV">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="part-no">PART IV</div>
+          <h2>Counting Reps:<br><span class="hl">two ways</span></h2>
+          <div class="part-sub">The classifier says <i>which</i> exercise. Reps are a separate problem with two solutions in the codebase: an unsupervised signal-processing method, and a supervised deep model trained on tap data.</div>
+          <div class="ticks"><span class="tick">autocorrelation</span><span class="tick">peak counting</span><span class="tick">density regression</span><span class="tick">dilated TCN</span></div>
+        </div>
+        <div class="pageno">28</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 29 · REP FRAMING
+         ============================================================= -->
+    <section class="slide" data-sec="Part IV · Reps">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">IV</span> Reps <span class="pill">framing</span></div>
+          <h2>Two different questions, two different <span class="hl">models</span></h2>
+          <p class="lede">"Which exercise?" is classification. "How many reps?" is counting a quasi-periodic signal, a different task that deserves its own approach.</p>
+          <div class="body">
+            <div class="grid2">
+              <div class="col">
+                <div class="card b"><h3>Unsupervised · <code class="inl">reps.py</code></h3><p>Treats a rep as one cycle of a periodic motion. Finds the dominant period by autocorrelation and divides bout length by it. <b>Needs zero labeled rep data to run.</b></p></div>
+                <div class="card g"><h3>Supervised · density model</h3><p>Learns from the phone's per-rep taps to emit "one bump per rep." More accurate, especially on wrist-quiet exercises, but it needs the tap ground truth.</p></div>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">Design choice</span>The watch ships <b>both</b>, with a graceful fallback: if the supervised model is bundled it's used, otherwise the unsupervised counter runs. You always get a number, and accuracy improves automatically once you've collected tap data and retrained.</div>
+                <div class="card r"><h3>Same scoring for both</h3><p>Both are judged with <b>exact / within-1 / MAE</b> against ground-truth counts, so you can compare them head-to-head and only deploy the supervised one if it actually wins.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">29</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 30 · UNSUPERVISED REPS
+         ============================================================= -->
+    <section class="slide" data-sec="Part IV · Reps">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">IV</span> Reps <span class="pill">reps.py · autocorrelation</span></div>
+          <h2>Unsupervised: find the <span class="hl">period</span>, divide</h2>
+          <div class="body" style="margin-top:16px">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>most-periodic channel → dominant lag</div>
+<pre class="code sm">for c in range(C):                  # each IMU channel
+  x = w[:,c] - w[:,c].mean()
+  score, lag = best_autocorr(x, min_lag, max_lag)
+  # keep the channel with the strongest periodicity
+period = best_lag
+autocorr_reps = round(N / period)   # bout / period
+# cross-check with a prominence-gated peak count
+if peaks ≈ autocorr_reps: return peaks
+else: return autocorr_reps</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Autocorrelation</b> slides the signal against itself; the lag with the highest correlation is the rep period <code class="inl">T</code>.</li>
+                  <li><b>Reps ≈ bout length / T.</b> Cross-checked against counting prominent peaks; they agree → trust peaks (better on partial reps), disagree → trust the period.</li>
+                  <li><b>Bounded search:</b> only periods of 0.5-4 s/rep are considered, which removes high-frequency jitter and slow drift.</li>
+                </ul>
+                <div class="note"><span class="tag">Classic DSP, no ML</span>A whole feature solved with signal processing and zero training data. The watch runs this <i>identical</i> algorithm live (slide 38), so the Python and Swift versions are kept deliberately in sync.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">30</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 31 · SUPERVISED DATA (density labels)
+         ============================================================= -->
+    <section class="slide" data-sec="Part IV · Reps">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">IV</span> Reps <span class="pill">rep_events.py</span></div>
+          <h2>Supervised data: taps → a <span class="hl">density target</span></h2>
+          <p class="lede">The core idea of the supervised counter is the <i>label</i>: instead of a single number, each rep becomes a unit-area Gaussian bump, so the total area under the curve equals the rep count.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>resample bout + sum-of-Gaussians</div>
+<pre class="code sm"># 1. slice the set's IMU, resample to fixed length
+seg = resample(seg, times, REP_BOUT_LEN)   # → 256
+# 2. place each rep on the 0..255 grid
+rep_idx = (rep_times - t0)/(t1-t0) * (L-1)
+# 3. label = sum of unit-area Gaussians (σ = 4)
+for r in rep_idx:
+  g = exp(-0.5*((grid-r)/sigma)**2); y += g/g.sum()
+# area(y) == number of reps  ✓</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Resample to 256 frames.</b> Bouts of any duration become the same length, so they batch together and the model is duration-agnostic.</li>
+                  <li><b>Unit-area Gaussians</b> mean the target <i>integrates</i> to the count, turning "count" into a smooth regression the network can learn.</li>
+                  <li><b>σ tolerance.</b> The bump's width forgives small timing errors in the human taps (and the clock-anchor conversion).</li>
+                  <li><b>Discards drop out</b> here too, mirroring the classifier.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">31</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 32 · SUPERVISED NET (RepDensityCNN)
+         ============================================================= -->
+    <section class="slide" data-sec="Part IV · Reps">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">IV</span> Reps <span class="pill">models.py · RepDensityCNN</span></div>
+          <h2>The rep net: keep time, emit a <span class="hl">bump per rep</span></h2>
+          <div class="body" style="margin-top:14px">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>dilated temporal convnet (TCN)</div>
+<pre class="code sm">stem: Conv1d(6→64, k=7)
+for d in (1, 2, 4, 8):        # growing dilation
+  Conv1d(64→64, k=3, dilation=d) → BN → ReLU → Drop
+head: Conv1d(64→1, k=1)
+out  = Softplus(head)         # ≥ 0, length L
+reps = out.sum()              # integral = count</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list">
+                  <li><b>No pooling away of time.</b> Unlike the classifier, the output stays length-256, so it can mark <i>where</i> each rep is.</li>
+                  <li><b>Dilations 1·2·4·8</b> grow the receptive field to span several reps cheaply, adding context without losing resolution.</li>
+                  <li><b>Softplus</b> forces a non-negative density; the rep count is simply its sum.</li>
+                  <li><b>Trained with MSE</b> against the Gaussian target; scored by exact / within-1 / MAE, per-exercise.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">32</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         DIVIDER · PART V
+         ============================================================= -->
+    <section class="slide divider" data-sec="Part V">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="part-no">PART V</div>
+          <h2>Deployment:<br><span class="hl">back onto the watch</span></h2>
+          <div class="part-sub">A trained PyTorch model isn't a product until it runs on the device. This part covers the Core ML conversion, the normalization baking, and the live inference loop that turns a stream of samples into detected sets.</div>
+          <div class="ticks"><span class="tick">ExportWrapper</span><span class="tick">coremltools</span><span class="tick">MLMultiArray</span><span class="tick">live segmentation</span></div>
+        </div>
+        <div class="pageno">33</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 34 · EXPORTWRAPPER
+         ============================================================= -->
+    <section class="slide" data-sec="Part V · Deploy">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">V</span> Deploy <span class="pill">models.py · ExportWrapper</span></div>
+          <h2>Bake normalization <span class="hl">into</span> the model</h2>
+          <p class="lede">The watch should hand over raw sensor values and get back probabilities, nothing in between. So the export wrapper folds the train-time normalization <i>inside</i> the model.</p>
+          <div class="body">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>raw IMU in → softmax out</div>
+<pre class="code sm">class ExportWrapper(nn.Module):
+  def __init__(self, model, mean, std):
+    self.register_buffer("mean", mean)  # frozen stats
+    self.register_buffer("std",  std)
+  def forward(self, x):       # (B, WINDOW, C) raw
+    x = x.transpose(1,2)      # → (B, C, WINDOW)
+    x = (x - self.mean)/self.std
+    return softmax(self.model(x), dim=1)</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b><code class="inl">register_buffer</code></b> stores the mean/std as part of the model, so they ship inside the <code class="inl">.mlpackage</code> and can never drift from what training used.</li>
+                  <li><b>Accepts the natural watch layout</b> <code class="inl">(B, WINDOW, C)</code> and transposes internally, so Swift just fills a buffer in sensor order.</li>
+                  <li><b>Softmax inside</b> means the output is ready-to-read probabilities, no post-processing on-device.</li>
+                </ul>
+                <div class="note"><span class="tag">Pattern: ship the preprocessing</span>Whenever a model needs preprocessing, baking it into the exported artifact removes an entire class of train/serve-skew bugs.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">34</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 35 · PYTORCH → COREML
+         ============================================================= -->
+    <section class="slide" data-sec="Part V · Deploy">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">V</span> Deploy <span class="pill">export_coreml.py</span></div>
+          <h2>PyTorch → Core ML in one <span class="hl">convert</span></h2>
+          <div class="body" style="margin-top:16px">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>trace, then convert</div>
+<pre class="code sm">wrapper = ExportWrapper(model, mean, std).eval()
+example = torch.randn(1, WINDOW, N_CHANNELS)
+traced  = torch.jit.trace(wrapper, example)
+
+mlmodel = ct.convert(traced,
+  inputs=[ct.TensorType("imu_window",
+          shape=(1, WINDOW, N_CHANNELS))],
+  classifier_config=ct.ClassifierConfig(classes),
+  minimum_deployment_target=ct.target.watchOS9)
+mlmodel.save("LiftLoggerClassifier.mlpackage")</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b><code class="inl">jit.trace</code></b> records the ops for one example input into a static graph coremltools can convert.</li>
+                  <li><b><code class="inl">ClassifierConfig</code></b> attaches the class names, so the model outputs a string label and a probability dictionary, not a bare tensor.</li>
+                  <li><b>watchOS 9 target</b> lets the converter pick op variants the watch's Neural Engine supports.</li>
+                  <li><b>Input contract:</b> <code class="inl">[1, 100, 6]</code>, channel order = <code class="inl">CHANNELS</code>. The watch code must match exactly.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">35</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 36 · ON-WATCH INFERENCE
+         ============================================================= -->
+    <section class="slide" data-sec="Part V · Deploy">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">V</span> Deploy <span class="pill">ExerciseClassifier (Swift)</span></div>
+          <h2>Running the model on the <span class="hl">wrist</span></h2>
+          <div class="body" style="margin-top:16px">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>fill MLMultiArray, predict</div>
+<pre class="code sm">// load generically by bundle resource, so the app
+// still builds before the model is dragged in:
+MLModel(contentsOf: "LiftLoggerClassifier.mlmodelc")
+
+// contiguous [1, W, C] → linear index t*C + c
+for t in 0..<W { for c in 0..<C {
+  ptr[t*C + c] = window[t][c] } }
+let out = model.prediction(["imu_window": arr])
+let label = out[labelName].stringValue</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Generic loading.</b> It loads the compiled model by resource name and reads feature names from the model description, so the manual recorder compiles <i>even before</i> the <code class="inl">.mlpackage</code> is added. <code class="inl">isReady</code> gates the AI mode.</li>
+                  <li><b>Memory layout is the contract.</b> The buffer must be laid out exactly as the converter expects (<code class="inl">t*C + c</code>), in the trained channel order. Get this wrong and you get silent garbage, not a crash.</li>
+                </ul>
+                <div class="note"><span class="tag">Build-time resilience</span>Decoupling the code from Xcode's generated model class means the project never fails to compile just because the model file isn't present yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">36</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 37 · LIVE SEGMENTATION
+         ============================================================= -->
+    <section class="slide" data-sec="Part V · Deploy">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">V</span> Deploy <span class="pill">live auto-detect</span></div>
+          <h2>From predictions to <span class="hl">detected sets</span></h2>
+          <p class="lede">A classifier fires ~2×/second on a sliding window. Turning that noisy stream into clean "a set started / a set ended" events needs a small, careful state machine.</p>
+          <div class="body">
+            <div class="grid2 wide-left">
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Sliding window + stride.</b> Keep the last 100 samples; run inference every 25 new samples (<code class="inl">inferenceStride</code>) ≈ twice a second.</li>
+                  <li><b>Confidence gate.</b> Below <code class="inl">0.6</code> top-probability, treat it as rest and never log a shaky guess.</li>
+                  <li><b>Debounce.</b> A label must win <code class="inl">commitWindows</code> times in a row before it opens or closes a set, which removes flicker.</li>
+                  <li><b>Min duration.</b> Bouts under 1.5 s are discarded as noise.</li>
+                  <li><b>Lead-in ring.</b> A buffer of recent samples seeds a new bout so its <i>first</i> reps aren't lost while debouncing.</li>
+                </ul>
+              </div>
+              <div class="col">
+                <div class="note"><span class="tag">Real-time ML is mostly post-processing</span>The model is the easy part. <b>Smoothing, thresholding, debouncing, and hysteresis</b> are what make live detection feel solid instead of jittery. These constants are tuned, and live in one place at the top of <code class="inl">RecorderModel</code>.</div>
+                <div class="card g"><h3>Output stays separate</h3><p>Auto-detect writes only <code class="inl">*_detected.csv</code> (with a confidence column), never <code class="inl">readings/sets</code>, so AI-guessed sessions can never be mistaken for hand-labeled training data.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">37</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 38 · ON-WATCH REP COUNTING + FALLBACK
+         ============================================================= -->
+    <section class="slide" data-sec="Part V · Deploy">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">V</span> Deploy <span class="pill">rep counting on-device</span></div>
+          <h2>Counting reps live, with a <span class="hl">safety net</span></h2>
+          <div class="body" style="margin-top:18px">
+            <div class="grid2">
+              <div class="col">
+                <div class="codewrap"><div class="codebar"><span class="dotr"></span>prefer the trained model, fall back gracefully</div>
+<pre class="code sm">// when a detected set closes:
+let reps = repModel.count(samples, fs: fs)   // CoreML
+        ?? repCounter.count(samples, fs: fs) // DSP
+
+// RepDensityCounter: resample bout → 256 frames,
+// run model, reps = sum of predicted density</pre></div>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Mirror of training.</b> The watch resamples the bout to 256 frames exactly like <code class="inl">rep_events._resample</code>, runs the density model, and <b>sums the output</b>, the integral-is-the-count idea, on-device.</li>
+                  <li><b>Nil-coalescing fallback.</b> If <code class="inl">LiftLoggerRepCounter.mlpackage</code> isn't bundled, <code class="inl">count()</code> returns <code class="inl">nil</code> and the unsupervised DSP counter takes over, the same one from slide 30.</li>
+                </ul>
+                <div class="note"><span class="tag">Why it matters</span>One line upgrades you from DSP to a learned counter the moment a better model exists, with no other code changes.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">38</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         DIVIDER · PART VI
+         ============================================================= -->
+    <section class="slide divider" data-sec="Part VI">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="part-no">PART VI</div>
+          <h2>What I Learned:<br><span class="hl">reading it back</span></h2>
+          <div class="part-sub">The cross-cutting lessons that only become visible once you've seen the whole system: the hidden coupling, the tech debt, and what "vibe-code then study" teaches.</div>
+          <div class="ticks"><span class="tick">the sync tax</span><span class="tick">tech debt</span><span class="tick">the meta-lesson</span></div>
+        </div>
+        <div class="pageno">39</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 40 · SYNC TAX
+         ============================================================= -->
+    <section class="slide" data-sec="Part VI · Reflection">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">VI</span> Reflection <span class="pill">hidden coupling</span></div>
+          <h2>The "keep-it-in-sync" <span class="hl">tax</span></h2>
+          <p class="lede">The most fragile thing in the project isn't any one algorithm. It's that the same constants live in <i>two languages</i> and must agree. The code comments call this out repeatedly for a reason.</p>
+          <div class="body" style="margin-top:8px">
+            <table class="tbl">
+              <tr><th>constant</th><th>Python</th><th>Swift</th><th>breaks if mismatched</th></tr>
+              <tr><td class="mono">sample rate</td><td class="mono">FS = 50</td><td class="mono">1.0/50.0</td><td>windows mean different durations</td></tr>
+              <tr><td class="mono">window</td><td class="mono">WINDOW = 100</td><td class="mono">windowSize = 100</td><td>wrong input shape → garbage</td></tr>
+              <tr><td class="mono">channels</td><td class="mono">CHANNELS[…]</td><td class="mono">acc+gravity, gyro</td><td>silently wrong predictions</td></tr>
+              <tr><td class="mono">bout length</td><td class="mono">REP_BOUT_LEN=256</td><td class="mono">repBoutLen = 256</td><td>rep counts off</td></tr>
+              <tr><td class="mono">reserved labels</td><td class="mono">rest / discard</td><td class="mono">restLabel / discardLabel</td><td>labeling logic corrupts</td></tr>
+            </table>
+            <div class="note" style="margin-top:18px"><span class="tag">The lesson</span>Distributed systems pay a <b>contract tax</b>. The mitigation here is discipline + loud comments. A more robust design would generate the Swift constants from <code class="inl">config.py</code>, or have the watch read class names from the model's own metadata instead of a hardcoded array.</div>
+          </div>
+        </div>
+        <div class="pageno">40</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 41 · TECH DEBT
+         ============================================================= -->
+    <section class="slide" data-sec="Part VI · Reflection">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">VI</span> Reflection <span class="pill">tech debt</span></div>
+          <h2>Where it's still <span class="hl">fragile</span>, and that's fine</h2>
+          <p class="lede">Knowing your project's weak points <i>is</i> the expertise. None of these are crises; they're a map of what to harden next.</p>
+          <div class="body">
+            <div class="grid2">
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Model is synthetic-only.</b> Real data hasn't replaced the sine waves yet, so the headline number is plumbing, not performance.</li>
+                  <li><b>Delete-on-delivery.</b> The watch deletes its copy once a transfer reports success; if the phone then fails to save it, the file is gone. No receipt handshake.</li>
+                  <li><b>scanPending</b> can list an active session's half-written files after a force-quit, risking a partial resend.</li>
+                </ul>
+              </div>
+              <div class="col">
+                <ul class="list tight">
+                  <li><b>Merged export is in-memory + on main thread.</b> Large histories could spike memory / freeze the UI.</li>
+                  <li><b>Second-precision session IDs</b> could collide if two sessions start in the same second.</li>
+                  <li><b>Zero functional tests.</b> The critical CSV contract between watch and Python has no automated guard.</li>
+                </ul>
+                <div class="note"><span class="tag">It also grew past its own map</span>The June codebase audit said "no on-watch inference, no rep counting." The live code now has <b>both</b>, plus the whole supervised rep-tagging system, a reminder that docs date fast, and reading the <i>code</i> is the source of truth.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pageno">41</div>
+      </div>
+    </section>
+
+    <!-- =============================================================
+         SLIDE 42 · META LESSON / CLOSING
+         ============================================================= -->
+    <section class="slide" data-sec="Part VI · Reflection">
+      <div class="page"><div class="margin-rule"></div>
+        <div class="inner">
+          <div class="sec-tag"><span class="n">VI</span> Reflection <span class="pill">the takeaway</span></div>
+          <h2>Vibe-code, then <span class="hl">study the artifact</span></h2>
+          <p class="lede">The thing you built is a strong way to learn, because every decision in it is real and consequential. These are the lessons that reading LiftLogger back made clear.</p>
+          <div class="body" style="margin-top:8px">
+            <div class="grid2">
+              <div class="col">
+                <div class="card b"><h3>Systems thinking</h3><p>The hard parts weren't the neural nets. They were the <b>seams</b>: clocks across devices, schemas across languages, train and serve consistency. The glue is where real systems live or die.</p></div>
+                <div class="card g"><h3>Honest ML</h3><p>Split by subject, weight imbalanced classes, read macro-F1 and the confusion matrix, and never trust a number whose data you don't understand. Methodology &gt; model.</p></div>
+              </div>
+              <div class="col">
+                <div class="card r"><h3>Deployment is half the project</h3><p>A trained model is not a feature. Conversion, baked preprocessing, memory layout, and live post-processing are what put it on the wrist.</p></div>
+                <div class="card p"><h3>Read the comments &amp; code</h3><p>This entire course came from the source. Well-commented code <i>is</i> documentation, and the surest way to turn "it works" into "I understand it."</p></div>
+              </div>
+            </div>
+            <div class="note" style="margin-top:18px;text-align:center"><b>You built it. Now you understand it. Do the same on the next one.</b></div>
+          </div>
+        </div>
+        <div class="section-foot">END · LIFTLOGGER · THE COMPLETE BUILD</div>
+        <div class="pageno">42</div>
+      </div>
+    </section>
+
+    </div><!-- /deck -->
+  </div><!-- /stage -->
+</div><!-- /viewport -->
+
+<div class="hud" id="hud">01 / 42</div>
+<div class="hint">← → / space · F fullscreen · E edit</div>
+
+<script>
+/* =====================================================================
+   FIT: scale the 1920×1080 stage uniformly to the viewport
+   ===================================================================== */
+function fit(){
+  const s=document.getElementById('stage');
+  const k=Math.min(window.innerWidth/1920, window.innerHeight/1080);
+  s.style.transform='scale('+k+')';
+}
+window.addEventListener('resize',fit); fit();
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+const slides=[...document.querySelectorAll('.slide')];
+let i=0;
+const hud=document.getElementById('hud');
+const prog=document.getElementById('progress');
+function show(n){
+  i=Math.max(0,Math.min(slides.length-1,n));
+  slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+  hud.textContent=String(i+1).padStart(2,'0')+' / '+slides.length;
+  prog.style.width=((i+1)/slides.length*100)+'%';
+}
+function next(){show(i+1)} function prev(){show(i-1)}
+window.addEventListener('keydown',e=>{
+  if(e.target.isContentEditable) return;
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next();}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev();}
+  else if(e.key==='Home'){show(0);} else if(e.key==='End'){show(slides.length-1);}
+  else if(e.key==='f'||e.key==='F'){ if(!document.fullscreenElement)document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+  else if(e.key==='e'||e.key==='E'){ toggleEdit(); }
+  else if((e.metaKey||e.ctrlKey)&&e.key==='s'){ e.preventDefault(); saveHTML(); }
+});
+/* tap/click navigation (ignore while editing) */
+document.getElementById('stage').addEventListener('click',e=>{
+  if(document.body.classList.contains('editing')) return;
+  const r=window.innerWidth; (e.clientX> r*0.5)?next():prev();
+});
+
+/* =====================================================================
+   LIGHT SYNTAX HIGHLIGHTER (single-pass, escapes first, no nesting)
+   ===================================================================== */
+const RE=/(\/\/[^\n]*|#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(\d+\.?\d*)\b|\b(func|let|var|guard|return|if|else|elif|for|in|while|class|struct|enum|case|switch|private|public|static|self|nil|true|false|import|def|None|and|or|not|with|as|from|continue|break|try)\b/g;
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function highlight(){
+  document.querySelectorAll('pre.code').forEach(el=>{
+    if(el.dataset.hl) return; el.dataset.hl='1';
+    let t=esc(el.textContent);
+    t=t.replace(RE,(m,com,str,num,kw)=>{
+      if(com) return '<span class="c">'+com+'</span>';
+      if(str) return '<span class="s">'+str+'</span>';
+      if(num) return '<span class="n">'+num+'</span>';
+      if(kw)  return '<span class="k">'+kw+'</span>';
+      return m;
+    });
+    el.innerHTML=t;
+  });
+}
+/* Shrink-to-fit: never let a code line clip horizontally, whatever its length */
+function fitCode(){
+  document.querySelectorAll('pre.code').forEach(p=>{
+    p.style.fontSize='';
+    let fs=parseFloat(getComputedStyle(p).fontSize), guard=0;
+    while(p.scrollWidth - p.clientWidth > 1 && fs>10.5 && guard<40){
+      fs-=0.5; p.style.fontSize=fs+'px'; guard++;
+    }
+  });
+}
+highlight(); fitCode();
+if(document.fonts && document.fonts.ready){ document.fonts.ready.then(()=>{ fitCode(); fit(); }); }
+
+/* =====================================================================
+   INLINE EDIT  (E toggles, Ctrl/Cmd+S downloads the edited file)
+   ===================================================================== */
+function toggleEdit(){
+  const on=document.body.classList.toggle('editing');
+  document.querySelectorAll('.slide.active .inner').forEach(n=>n.contentEditable=on);
+  hud.textContent= on ? 'EDITING · Ctrl/Cmd+S to save' : (String(i+1).padStart(2,'0')+' / '+slides.length);
+}
+function saveHTML(){
+  document.querySelectorAll('[contenteditable]').forEach(n=>n.removeAttribute('contenteditable'));
+  document.body.classList.remove('editing');
+  const blob=new Blob(['<!DOCTYPE html>\n'+document.documentElement.outerHTML],{type:'text/html'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='liftlogger-course.html';a.click();
+}
+show(0);
+</script>
+</body>
+</html>

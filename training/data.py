@@ -6,6 +6,8 @@ Input schema (produced by the iPhone app's "merged export"):
 
 time_ms in both files is the watch's time-since-boot clock, so a reading belongs
 to a set iff start_ms <= time_ms <= end_ms within the same (subject, session).
+The labeled interval is shrunk by config.TRIM_SEC on each end (see label_samples)
+so button-press setup/wind-down motion is treated as REST, not the exercise.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -34,18 +36,38 @@ def load_raw() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def label_samples(readings: pd.DataFrame, sets: pd.DataFrame) -> pd.DataFrame:
-    """Tag each reading with the exercise of the set interval it falls in, else REST."""
+    """Tag each reading with the exercise of the set interval it falls in, else REST.
+
+    Sets whose exercise == DISCARD_LABEL (marked bad on the watch) are applied last
+    and override any other label, so make_windows can drop windows that touch them.
+    """
     readings = readings.copy()
     readings["label"] = config.REST_LABEL
+    start_ms = config.TRIM_START_SEC * 1000.0
+    end_ms = config.TRIM_END_SEC * 1000.0
     for (subj, sess), grp in sets.groupby(["subject", "session"]):
         mask = (readings["subject"] == subj) & (readings["session"] == sess)
         if not mask.any():
             continue
         t = readings.loc[mask, "time_ms"].to_numpy()
         labels = np.full(len(t), config.REST_LABEL, dtype=object)
-        for _, row in grp.iterrows():
-            inside = (t >= row["start_ms"]) & (t <= row["end_ms"])
-            labels[inside] = row["exercise"]
+        # Real exercises first; discarded sets second so they win on any overlap.
+        ordered = sorted(
+            grp.itertuples(index=False),
+            key=lambda r: r.exercise == config.DISCARD_LABEL,
+        )
+        for row in ordered:
+            start, end = row.start_ms, row.end_ms
+            if row.exercise == config.DISCARD_LABEL:
+                # Discard the exact interval — no trim (we want all of the bad motion).
+                inside = (t >= start) & (t <= end)
+            else:
+                # Trim setup (front) / wind-down (end) so transition motion stays REST.
+                # Skip trimming if the set is too short to survive it (keep the full set).
+                if end - start > start_ms + end_ms:
+                    start, end = start + start_ms, end - end_ms
+                inside = (t >= start) & (t <= end)
+            labels[inside] = row.exercise
         readings.loc[mask, "label"] = labels
     return readings
 
@@ -59,6 +81,8 @@ def make_windows(readings: pd.DataFrame) -> Dataset:
         lab = grp["label"].to_numpy()
         for start in range(0, len(grp) - W + 1, S):
             wl = lab[start:start + W]
+            if (wl == config.DISCARD_LABEL).any():
+                continue                       # touches a set the user marked bad
             vals, counts = np.unique(wl, return_counts=True)
             j = counts.argmax()
             if counts[j] / W < config.LABEL_PURITY:

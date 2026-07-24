@@ -60,3 +60,54 @@ class ExportWrapper(nn.Module):
         x = x.transpose(1, 2)            # (B, WINDOW, C) -> (B, C, WINDOW)
         x = (x - self.mean) / self.std
         return torch.softmax(self.model(x), dim=1)
+
+
+class RepDensityCNN(nn.Module):
+    """Per-rep density regressor. Input (B, C, L) -> density (B, L), >= 0.
+
+    Unlike CNN1D this keeps full temporal resolution (no pooling away of time):
+    a stack of dilated convolutions grows the receptive field to span a few reps
+    while the output stays length-L, so the net emits one bump per rep. Softplus
+    keeps the density non-negative; the rep count is its integral (sum over time).
+    """
+    def __init__(self, n_channels: int = config.N_CHANNELS, dropout: float = config.DROPOUT):
+        super().__init__()
+        ch = 64
+        self.stem = nn.Sequential(
+            nn.Conv1d(n_channels, ch, kernel_size=7, padding=3),
+            nn.BatchNorm1d(ch), nn.ReLU(),
+        )
+        # Dilations 1,2,4,8 widen the context to ~ a few seconds at 50 Hz.
+        blocks = []
+        for d in (1, 2, 4, 8):
+            blocks += [
+                nn.Conv1d(ch, ch, kernel_size=3, padding=d, dilation=d),
+                nn.BatchNorm1d(ch), nn.ReLU(),
+                nn.Dropout(dropout),
+            ]
+        self.tcn = nn.Sequential(*blocks)
+        self.head = nn.Conv1d(ch, 1, kernel_size=1)
+        self.act = nn.Softplus()
+
+    def forward(self, x):
+        h = self.tcn(self.stem(x))
+        return self.act(self.head(h)).squeeze(1)     # (B, L)
+
+
+class RepExportWrapper(nn.Module):
+    """Wraps a trained RepDensityCNN for deployment.
+
+    Accepts (B, L, C) raw IMU (the natural on-watch bout layout), normalizes with
+    fixed train statistics, and returns the per-frame rep density (B, L). The watch
+    counts reps by summing the density (optionally peak-picking it).
+    """
+    def __init__(self, model: RepDensityCNN, mean, std):
+        super().__init__()
+        self.model = model
+        self.register_buffer("mean", torch.as_tensor(mean, dtype=torch.float32).view(1, -1, 1))
+        self.register_buffer("std", torch.as_tensor(std, dtype=torch.float32).view(1, -1, 1))
+
+    def forward(self, x):
+        x = x.transpose(1, 2)            # (B, L, C) -> (B, C, L)
+        x = (x - self.mean) / self.std
+        return self.model(x)

@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiftLogger, Under the Hood — an interactive course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   LiftLogger — Interactive Course
+   Design: warm "engineering field notebook"
+   ============================================================ */
+:root{
+  --paper:#f7f1e4;        /* base page, odd modules */
+  --paper-2:#efe5d1;      /* alt page, even modules */
+  --panel:#fffaf0;        /* raised cards */
+  --ink:#241d12;          /* primary text */
+  --muted:#6c6049;        /* secondary text */
+  --faint:#988a68;        /* captions */
+  --rule:#d8cba8;         /* hairlines */
+  --accent:#c0461c;       /* vermillion — the signal color */
+  --accent-soft:#f3d9cb;
+  --blue:#2b5488;         /* watch/phone accent */
+  --blue-soft:#d4dded;
+  --green:#3f6f3a;        /* "correct" / trainer */
+  --green-soft:#d9e6cf;
+  --amber:#b07a16;
+  /* dark code block (Catppuccin-ish on deep indigo) */
+  --code-bg:#1e1e2e;
+  --code-fg:#cdd6f4;
+  --code-comment:#7f849c;
+  --code-kw:#cba6f7;
+  --code-str:#a6e3a1;
+  --code-num:#fab387;
+  --code-fn:#89b4fa;
+  --shadow:0 18px 40px -22px rgba(60,40,16,.55);
+  --shadow-sm:0 8px 20px -14px rgba(60,40,16,.6);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:"DM Sans",system-ui,sans-serif;
+  color:var(--ink);
+  background:var(--paper);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.display{font-family:"Bricolage Grotesque","DM Sans",sans-serif;font-weight:800;line-height:1.05;letter-spacing:-.02em}
+code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+
+/* ---------- progress bar ---------- */
+#progress{position:fixed;top:0;left:0;height:3px;width:0%;background:var(--accent);z-index:60;transition:width .1s linear}
+
+/* ---------- side nav dots ---------- */
+#nav{position:fixed;right:22px;top:50%;transform:translateY(-50%);z-index:55;display:flex;flex-direction:column;gap:14px}
+.nav-dot{position:relative;width:11px;height:11px;border-radius:50%;border:2px solid var(--rule);background:transparent;cursor:pointer;padding:0;transition:.2s}
+.nav-dot:hover{border-color:var(--accent)}
+.nav-dot.active{background:var(--accent);border-color:var(--accent);transform:scale(1.25)}
+.nav-dot span{position:absolute;right:22px;top:50%;transform:translateY(-50%);white-space:nowrap;background:var(--ink);color:var(--paper);font-size:12px;font-weight:600;padding:4px 9px;border-radius:6px;opacity:0;pointer-events:none;transition:.18s}
+.nav-dot:hover span{opacity:1}
+@media(max-width:760px){#nav{display:none}}
+
+/* ---------- module / layout ---------- */
+.module{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:84px 24px;scroll-snap-align:start;border-bottom:1px solid var(--rule)}
+main{scroll-snap-type:y proximity}
+.module:nth-of-type(even){background:var(--paper-2)}
+.wrap{width:100%;max-width:920px;margin:0 auto}
+.kicker{font-family:"JetBrains Mono",monospace;font-size:12.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 14px}
+.module h2{font-size:clamp(30px,5vw,52px);margin:0 0 8px}
+.module h3{font-size:clamp(20px,2.6vw,26px);margin:34px 0 10px}
+.lede{font-size:clamp(17px,2.2vw,21px);color:var(--muted);max-width:60ch;margin:6px 0 0}
+p{max-width:64ch}
+.small{font-size:14px;color:var(--faint)}
+.divider{height:1px;background:var(--rule);border:0;margin:30px 0}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:720px){.two-col{grid-template-columns:1fr}}
+
+/* ---------- hero ---------- */
+#hero{justify-content:center;text-align:center;background:
+   radial-gradient(120% 80% at 50% -10%, #fbf5e8 0%, var(--paper) 55%)}
+#hero .badge{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);border:1.5px solid var(--accent);border-radius:999px;padding:6px 14px;margin-bottom:26px}
+#hero h1{font-size:clamp(40px,8vw,86px);margin:0 0 18px;letter-spacing:-.03em}
+#hero h1 em{font-style:normal;color:var(--accent)}
+#hero .lede{margin:0 auto;font-size:clamp(18px,2.6vw,24px)}
+.stack-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:34px 0 8px}
+.chip{font-family:"JetBrains Mono",monospace;font-size:12.5px;background:var(--panel);border:1px solid var(--rule);border-radius:999px;padding:7px 13px;color:var(--muted);box-shadow:var(--shadow-sm)}
+.scroll-cue{margin-top:42px;color:var(--faint);font-size:13px;letter-spacing:.08em}
+.scroll-cue .arrow{display:block;margin:8px auto 0;width:22px;height:22px;border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(45deg);animation:bob 1.6s infinite}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(45deg)}50%{transform:translateY(7px) rotate(45deg)}}
+
+/* ---------- cards / callouts ---------- */
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:20px 22px;box-shadow:var(--shadow-sm)}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 14px 14px 0;padding:16px 20px;margin:24px 0}
+.callout.blue{border-color:var(--blue);background:var(--blue-soft)}
+.callout.green{border-color:var(--green);background:var(--green-soft)}
+.callout .lbl{font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--accent);display:block;margin-bottom:6px}
+.callout.blue .lbl{color:var(--blue)}
+.callout.green .lbl{color:var(--green)}
+.callout p{margin:0;max-width:none}
+.why{display:inline-block;font-weight:700;color:var(--accent)}
+
+/* ---------- glossary term ---------- */
+.term{border-bottom:2px dotted var(--accent);cursor:help;font-weight:600;color:inherit}
+#tip{position:fixed;z-index:80;max-width:300px;background:var(--ink);color:var(--paper);font-size:13.5px;line-height:1.5;padding:11px 14px;border-radius:10px;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .14s;font-family:"DM Sans",sans-serif}
+#tip b{color:#ffd9a0}
+
+/* ---------- code <-> english ---------- */
+.cx{display:grid;grid-template-columns:1.15fr .85fr;gap:0;border:1px solid var(--rule);border-radius:14px;overflow:hidden;margin:22px 0;box-shadow:var(--shadow-sm)}
+@media(max-width:720px){.cx{grid-template-columns:1fr}}
+.cx pre{margin:0;background:var(--code-bg);color:var(--code-fg);padding:18px 18px;font-size:13px;line-height:1.65;overflow-x:auto}
+.cx .eng{background:var(--panel);padding:18px 20px;font-size:14.5px;display:flex;flex-direction:column;justify-content:center;gap:10px}
+.cx .eng .h{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.cx .eng p{margin:0;max-width:none;color:var(--ink)}
+.cx .eng .k{color:var(--muted);font-size:13.5px}
+.c{color:var(--code-comment);font-style:italic}
+.k{color:var(--code-kw)}
+.s{color:var(--code-str)}
+.n{color:var(--code-num)}
+.f{color:var(--code-fn)}
+pre .cmt{color:var(--code-comment);font-style:italic}
+
+/* ---------- quiz ---------- */
+.quiz{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:22px 24px;margin:26px 0;box-shadow:var(--shadow-sm)}
+.quiz .qlabel{font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:8px}
+.quiz .q{font-weight:700;font-size:17px;margin:0 0 16px;max-width:none}
+.opt{display:block;width:100%;text-align:left;background:var(--paper);border:1.5px solid var(--rule);border-radius:11px;padding:13px 16px;margin:9px 0;font-size:15px;font-family:inherit;color:var(--ink);cursor:pointer;transition:.15s}
+.opt:hover{border-color:var(--accent);transform:translateX(2px)}
+.opt.correct{border-color:var(--green);background:var(--green-soft);font-weight:600}
+.opt.wrong{border-color:var(--accent);background:var(--accent-soft);opacity:.85}
+.opt .mark{float:right;font-weight:800}
+.opt.correct .mark::after{content:"✓";color:var(--green)}
+.opt.wrong .mark::after{content:"✗";color:var(--accent)}
+.quiz .explain{display:none;margin-top:14px;padding:14px 16px;border-radius:11px;background:var(--blue-soft);border-left:4px solid var(--blue);font-size:14.5px}
+.quiz.answered .explain{display:block}
+.quiz.answered .opt{cursor:default}
+.quiz.answered .opt:hover{transform:none}
+
+/* ---------- group chat ---------- */
+.chat{background:var(--panel);border:1px solid var(--rule);border-radius:18px;padding:18px;margin:24px 0;box-shadow:var(--shadow-sm)}
+.chat .chat-head{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--faint);border-bottom:1px solid var(--rule);padding-bottom:10px;margin-bottom:14px;font-family:"JetBrains Mono",monospace}
+.chat .stream{display:flex;flex-direction:column;gap:12px;min-height:60px}
+.bubble{max-width:78%;padding:10px 14px;border-radius:16px;font-size:14.5px;line-height:1.45;opacity:0;transform:translateY(8px);animation:pop .35s forwards;position:relative}
+.bubble .who{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;margin-bottom:3px;opacity:.8}
+.bubble.left{align-self:flex-start;background:#eee6d4;border-bottom-left-radius:5px}
+.bubble.right{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:5px}
+.bubble.mid{align-self:center;background:var(--green);color:#fff;text-align:center;border-radius:14px}
+.bubble.left .who{color:var(--accent)}
+@keyframes pop{to{opacity:1;transform:translateY(0)}}
+.typing{align-self:flex-start;background:#eee6d4;padding:12px 16px;border-radius:16px;border-bottom-left-radius:5px;display:inline-flex;gap:4px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--faint);animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+.replay{margin-top:12px;font-family:"JetBrains Mono",monospace;font-size:12px;background:transparent;border:1px solid var(--rule);border-radius:8px;padding:6px 12px;color:var(--muted);cursor:pointer}
+.replay:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- flow animation ---------- */
+.flow{background:var(--panel);border:1px solid var(--rule);border-radius:18px;padding:22px;margin:24px 0;box-shadow:var(--shadow-sm)}
+.flow .track{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;justify-content:center}
+.fnode{flex:1;min-width:120px;text-align:center;padding:14px 10px;border-radius:12px;border:1.5px solid var(--rule);background:var(--paper);margin:4px;position:relative;transition:.25s;opacity:.55}
+.fnode.lit{opacity:1;border-color:var(--accent);background:var(--accent-soft);transform:translateY(-3px);box-shadow:var(--shadow-sm)}
+.fnode .icon{font-size:22px;display:block;margin-bottom:6px}
+.fnode .t{font-weight:700;font-size:13.5px}
+.fnode .s{font-size:11.5px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+.flow .detail{margin-top:16px;min-height:48px;background:var(--paper);border-radius:11px;border-left:4px solid var(--accent);padding:12px 16px;font-size:14.5px;transition:.2s}
+.flow .detail b{color:var(--accent)}
+.flow .controls{display:flex;gap:10px;align-items:center;margin-top:14px}
+.flow button.play{font-family:"JetBrains Mono",monospace;font-size:13px;background:var(--accent);color:#fff;border:0;border-radius:9px;padding:9px 18px;cursor:pointer;font-weight:700}
+.flow button.play:hover{filter:brightness(1.06)}
+.flow .step-count{font-size:12px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+
+/* ---------- canvas viz ---------- */
+.viz{background:var(--code-bg);border-radius:14px;padding:14px;margin:22px 0;box-shadow:var(--shadow-sm)}
+.viz canvas{width:100%;display:block;border-radius:8px}
+.viz .cap{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#9aa0c0;margin-top:10px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.legend span{margin-right:14px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+/* actor cards */
+.actors{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:24px 0}
+@media(max-width:720px){.actors{grid-template-columns:1fr}}
+.actor{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:18px;box-shadow:var(--shadow-sm)}
+.actor .face{font-size:30px}
+.actor h4{font-family:"Bricolage Grotesque";margin:8px 0 2px;font-size:19px}
+.actor .role{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.actor.b .role{color:var(--blue)} .actor.g .role{color:var(--green)}
+.actor ul{margin:10px 0 0;padding-left:18px;font-size:13.5px;color:var(--muted)}
+.actor li{margin:4px 0}
+
+/* end */
+#end{text-align:center;background:radial-gradient(120% 80% at 50% 110%, #fbf5e8 0%, var(--paper-2) 60%)}
+.loop-ring{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:26px 0}
+.loop-ring .step{font-family:"JetBrains Mono",monospace;font-size:13px;background:var(--panel);border:1px solid var(--rule);border-radius:999px;padding:9px 16px;box-shadow:var(--shadow-sm)}
+.loop-ring .step b{color:var(--accent)}
+footer{padding:40px 24px 60px;text-align:center;color:var(--faint);font-size:13px;background:var(--paper-2)}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="tip"></div>
+<nav id="nav"></nav>
+
+<main>
+
+<!-- ======================= HERO ======================= -->
+<section class="module" id="hero" data-title="Start">
+  <div class="wrap">
+    <span class="badge">Interactive Course · 6 modules</span>
+    <h1>LiftLogger,<br><em>Under the Hood</em></h1>
+    <p class="lede">How an Apple&nbsp;Watch learns to recognize your gym exercises — and counts your reps — built from raw motion sensors, a tiny neural network, and three programs that hand work to each other.</p>
+    <div class="stack-row">
+      <span class="chip">Swift · watchOS</span>
+      <span class="chip">Swift · iOS</span>
+      <span class="chip">Python · PyTorch</span>
+      <span class="chip">Core ML</span>
+      <span class="chip">no cloud, no internet</span>
+    </div>
+    <p class="small" style="max-width:54ch;margin:18px auto 0">No coding background needed. Every term with a <span class="term" data-term="dotted">dotted underline</span> has a plain-English definition — hover or tap it.</p>
+    <div class="scroll-cue">scroll to begin<span class="arrow"></span></div>
+  </div>
+</section>
+
+<!-- ======================= MODULE 1 ======================= -->
+<section class="module" id="m1" data-title="The First Tap">
+  <div class="wrap">
+    <p class="kicker">Module 1 · The sensor</p>
+    <h2>The tap that starts everything</h2>
+    <p class="lede">You strap on the watch, tap <b>Start Session</b>, tap <b>incline chest press</b>, knock out 8 reps, tap <b>End Set</b>. Under the glass, something has been frantically scribbling the whole time.</p>
+
+    <h3>50 snapshots of your wrist, every second</h3>
+    <p>Inside the watch is an <span class="term" data-term="imu">IMU</span> — a chip that measures motion. LiftLogger reads it <b>50 times per second</b>. Each read is 6 numbers: how hard the wrist is accelerating in 3 directions, and how fast it's rotating in 3 directions. That's your "incline chest press" turned into a stream of numbers a computer can learn from.</p>
+
+    <div class="viz">
+      <canvas id="imu-canvas" height="170"></canvas>
+      <div class="cap">
+        <span class="legend">
+          <span><i class="dot" style="background:#f38ba8"></i>acc_x/y/z</span>
+          <span><i class="dot" style="background:#89b4fa"></i>gyro_x/y/z</span>
+        </span>
+        <span id="imu-counter">samples written: 0</span>
+      </div>
+    </div>
+
+    <p>The app calls this rate <span class="mono">FS = 50</span> (FS = "frequency of sampling," in <span class="term" data-term="hz">hertz</span>). Hold onto that number — in Module 4 you'll see it has to match in two completely different programs, or nothing works.</p>
+
+    <h3>Why it keeps gravity in the numbers</h3>
+    <p>The watch could subtract out gravity and report only the motion <em>you</em> add. LiftLogger deliberately does the opposite — it adds gravity back in. Gravity always points down, so it secretly tells you which way the arm is tilted. That orientation is a huge clue for telling a <em>shoulder press</em> (arm overhead) apart from a <em>curl</em> (arm down).</p>
+
+    <div class="cx">
+<pre><span class="cmt">// Total acceleration INCLUDING gravity.</span>
+<span class="cmt">// Gravity encodes arm orientation, which</span>
+<span class="cmt">// helps separate exercises.</span>
+<span class="k">let</span> ax = dm.userAcceleration.x + dm.gravity.x
+<span class="k">let</span> ay = dm.userAcceleration.y + dm.gravity.y
+<span class="k">let</span> az = dm.userAcceleration.z + dm.gravity.z
+<span class="k">let</span> r  = dm.rotationRate  <span class="cmt">// rad/s, 3 axes</span></pre>
+      <div class="eng">
+        <span class="h">In plain English</span>
+        <p>"Acceleration you caused" + "the pull of gravity" = the full picture of where the arm is <em>and</em> how it's moving.</p>
+        <p class="k">Throwing gravity away would have made two different exercises look identical to the model.</p>
+      </div>
+    </div>
+
+    <h3>A machine that can only be in one mode at a time</h3>
+    <p>How does the app know that "End Set" means something only if a set is open? It uses a <span class="term" data-term="statemachine">state machine</span>: at any moment the app is in exactly one labeled mode, and only certain moves are legal.</p>
+    <div class="card" style="margin:18px 0">
+      <p class="mono" style="margin:0;font-size:14px;color:var(--muted)">
+        idle → <b style="color:var(--accent)">resting</b> → countdown → <b style="color:var(--accent)">inSet</b> → enteringReps → (back to resting)
+      </p>
+      <p class="small" style="margin:8px 0 0">You can't "End Set" from <span class="mono">resting</span>, and you can't tap an exercise from <span class="mono">idle</span>. Illegal moves are simply impossible — the bug never gets a chance to happen.</p>
+    </div>
+
+    <div class="callout">
+      <span class="lbl">Aha — why a vibe coder should care</span>
+      <p>"Use a state machine" is a phrase you can hand to an AI coding tool. It's the difference between <em>"add a flag to track if we're recording"</em> (which spawns edge-case bugs forever) and a design where bad states <span class="why">cannot exist</span>. When your app has modes — recording/paused, logged-in/out, loading/loaded — name them and make the illegal jumps impossible.</p>
+    </div>
+
+    <div class="quiz" data-quiz>
+      <div class="qlabel">Quick check</div>
+      <p class="q">Why does LiftLogger keep gravity in its acceleration numbers instead of removing it?</p>
+      <button class="opt" data-correct="false">Because removing it would be too slow on a watch <span class="mark"></span></button>
+      <button class="opt" data-correct="true">Because the direction of gravity reveals how the arm is tilted, which helps tell exercises apart <span class="mark"></span></button>
+      <button class="opt" data-correct="false">Because the gyroscope can't work without it <span class="mark"></span></button>
+      <div class="explain"><b>Right idea:</b> gravity is a free orientation sensor. An overhead press and a curl produce different gravity directions, so keeping it makes the two far easier for the model to separate. Speed isn't the reason, and the gyroscope is independent.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= MODULE 2 ======================= -->
+<section class="module" id="m2" data-title="The Cast">
+  <div class="wrap">
+    <p class="kicker">Module 2 · The architecture</p>
+    <h2>Meet the cast</h2>
+    <p class="lede">LiftLogger isn't one program — it's three, each with one job, passing work down a line like a relay team. Knowing who does what is what lets you tell an AI <em>"put this logic on the watch, not the phone."</em></p>
+
+    <div class="actors">
+      <div class="actor">
+        <div class="face">⌚️</div>
+        <div class="role">The Scribe · watchOS</div>
+        <h4>The Watch app</h4>
+        <ul>
+          <li>The <em>only</em> thing that touches the sensor</li>
+          <li>Writes motion to CSV files</li>
+          <li>Runs the AI live (Modules 5–6)</li>
+        </ul>
+      </div>
+      <div class="actor b">
+        <div class="face">📱</div>
+        <div class="role">The Librarian · iOS</div>
+        <h4>The iPhone app</h4>
+        <ul>
+          <li>Receives files from the watch</li>
+          <li>Files them by date, lets you export</li>
+          <li>Hosts the "rep tagger" (Module 6)</li>
+        </ul>
+      </div>
+      <div class="actor g">
+        <div class="face">🧠</div>
+        <div class="role">The Teacher · Python</div>
+        <h4>The training pipeline</h4>
+        <ul>
+          <li>Runs offline on a laptop</li>
+          <li>Turns CSVs into a trained model</li>
+          <li>Exports a "brain" the watch can run</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>Notice the <b>one-way street</b>: the watch produces data, the phone stores it, the laptop learns from it — and the learned model gets carried back to the watch. No piece reaches across and pokes at another's internals. That clean separation is why each piece can be rewritten without breaking the others.</p>
+
+    <div class="callout blue">
+      <span class="lbl">The pattern under the hood</span>
+      <p>Both apps use an <span class="term" data-term="observable">observable object</span>: one chunk of state (the "model") that the screen <em>watches</em>. When a number changes — <span class="mono">sampleCount</span>, <span class="mono">phase</span> — the screen redraws itself automatically. You change the data; the UI follows. That's the whole idea behind SwiftUI, React, and most modern app frameworks.</p>
+    </div>
+
+    <h3>Watch the three of them talk</h3>
+    <p>A real session is a little conversation between the actors. Here's how it sounds:</p>
+
+    <div class="chat" id="chat-cast" data-chat='[
+      {"side":"left","who":"⌚️ Watch","text":"session_start — subject S01, here is my clock anchor so your taps line up with my data."},
+      {"side":"right","who":"📱 Phone","text":"Got it. Opening a reps file for this session. Ready when you are."},
+      {"side":"left","who":"⌚️ Watch","text":"Recording 50 samples/sec… set started… set ended… End Session. Sending you two CSV files."},
+      {"side":"right","who":"📱 Phone","text":"Files received and filed under “Jun-28”. You can export them whenever."},
+      {"side":"mid","who":"🧠 Trainer (laptop, later)","text":"Took the exported CSVs, trained a model, and baked it into a Core ML brain — carry it back to the watch."}
+    ]'>
+      <div class="chat-head">▸ session.log — Watch ⇄ Phone ⇄ Trainer</div>
+      <div class="stream"></div>
+      <button class="replay">↻ replay</button>
+    </div>
+
+    <div class="quiz" data-quiz>
+      <div class="qlabel">Quick check</div>
+      <p class="q">You want to add live "you're going too fast" feedback <em>during</em> a set. Which actor should own that logic?</p>
+      <button class="opt" data-correct="true">The Watch — it's the only one holding the live sensor stream <span class="mark"></span></button>
+      <button class="opt" data-correct="false">The Phone — it has a bigger screen <span class="mark"></span></button>
+      <button class="opt" data-correct="false">The Python trainer — it knows the most about exercises <span class="mark"></span></button>
+      <div class="explain"><b>The Watch.</b> Feedback that must happen <em>in the moment</em> needs the live data, and only the watch has it. The phone only sees files after the fact; the Python trainer runs offline on a laptop and never touches a live session. Matching a feature to the actor that holds the right data is the core architectural instinct.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= MODULE 3 ======================= -->
+<section class="module" id="m3" data-title="Off the Watch">
+  <div class="wrap">
+    <p class="kicker">Module 3 · Data plumbing</p>
+    <h2>Getting the data off the watch</h2>
+    <p class="lede">The watch has no keyboard and a tiny battery. So it writes data to plain text files and <em>mails</em> them to the phone — a design that survives a dead app, a dropped connection, even a reboot.</p>
+
+    <h3>Write a little, write often</h3>
+    <p>Samples arrive 50× a second. Writing each one to disk instantly would be wasteful, so the app collects them in memory (a <span class="term" data-term="buffer">buffer</span>) and <span class="term" data-term="flush">flushes</span> a batch to the file once a second. Crash mid-workout? You lose at most one second.</p>
+
+    <div class="cx">
+<pre><span class="cmt">// workQueue only. Writes buffered lines</span>
+<span class="cmt">// so a crash loses ≤ 1 s of data.</span>
+<span class="k">private func</span> <span class="f">flushReadings</span>() {
+  <span class="k">guard</span> !lineBuffer.isEmpty,
+        <span class="k">let</span> h = readingsHandle <span class="k">else</span> { <span class="k">return</span> }
+  <span class="k">let</span> chunk = lineBuffer.joined(separator:<span class="s">"\n"</span>)
+  lineBuffer.removeAll()      <span class="cmt">// empty the basket</span>
+  <span class="k">try?</span> h.write(contentsOf: chunk.data(...))
+}</pre>
+      <div class="eng">
+        <span class="h">In plain English</span>
+        <p>Collect ~50 rows in a basket, dump the whole basket to the file at once, empty the basket, repeat.</p>
+        <p class="k">Batching like this is everywhere in software: it trades a tiny bit of risk (1 second) for a huge gain in efficiency and battery.</p>
+      </div>
+    </div>
+
+    <h3>Mailing, not calling</h3>
+    <p>To move files, the watch uses <span class="term" data-term="wc">WatchConnectivity</span>'s <span class="mono">transferFile</span>. This is "mail it and forget it," not a live phone call: the system delivers the file in the background, retrying on its own if the phone is out of range — even if you quit the app. When it arrives, the phone must grab it <em>instantly</em>, because the system deletes the inbox copy the moment the handler returns.</p>
+
+    <div class="flow" id="flow-transfer" data-steps='[
+      {"icon":"🤚","t":"One sample","s":"6 numbers","detail":"The motion chip delivers one reading: 3 acceleration + 3 rotation values, stamped with the time."},
+      {"icon":"🧺","t":"Buffer","s":"lineBuffer","detail":"The sample is appended to an in-memory basket. Cheap — nothing touches the disk yet."},
+      {"icon":"💾","t":"Flush to file","s":"every ~50","detail":"Once the basket holds ~1 second of samples, the whole batch is written to <b>readings.csv</b> at once."},
+      {"icon":"📤","t":"transferFile","s":"WatchConnectivity","detail":"At End Session, the finished CSV is handed to the OS to deliver in the background — survives app quit & range loss."},
+      {"icon":"📥","t":"didReceive","s":"move it NOW","detail":"The phone moves the file out of the inbox <b>synchronously</b> — the system deletes the inbox copy the instant the handler returns."},
+      {"icon":"🗂️","t":"Filed","s":"Jun-28/","detail":"The phone drops it in a date-named folder, ready to merge and export for training."}
+    ]'>
+      <div class="track"></div>
+      <div class="detail">Press play to follow one reading from the sensor all the way to a filed CSV.</div>
+      <div class="controls">
+        <button class="play">▶ play flow</button>
+        <span class="step-count"></span>
+      </div>
+    </div>
+
+    <h3>The one-clock rule</h3>
+    <p>Here's the subtle masterstroke. Both the motion samples <em>and</em> the "set started / set ended" taps are stamped with the same clock — the watch's <span class="term" data-term="uptime">time-since-boot</span> clock. That guarantees a reading falls inside a set if its timestamp is between the set's start and end. In Module 4 that single fact is what lets the trainer label the data correctly.</p>
+
+    <div class="callout">
+      <span class="lbl">Aha — the clock alignment trick</span>
+      <p>When two streams of events need to be matched up later, <span class="why">stamp them with the same clock at the source.</span> The phone's "rep tagger" (Module 6) lives on a <em>different</em> device with a <em>different</em> clock — so the watch sends it an "anchor" to translate between the two. Mismatched clocks are one of the sneakiest sources of data bugs.</p>
+    </div>
+
+    <div class="quiz" data-quiz>
+      <div class="qlabel">Quick check</div>
+      <p class="q">Why must the phone move the received file <em>synchronously</em> the moment it arrives?</p>
+      <button class="opt" data-correct="false">Because moving files is faster than copying them <span class="mark"></span></button>
+      <button class="opt" data-correct="true">Because the system deletes the inbox copy as soon as the handler returns, so there's no second chance <span class="mark"></span></button>
+      <button class="opt" data-correct="false">Because the watch is waiting on the line for a reply <span class="mark"></span></button>
+      <div class="explain"><b>Exactly.</b> The delivered file lives in a temporary inbox that vanishes the instant the receive handler finishes. If the phone deferred the move to "later," later would be too late. (And it's <em>not</em> a live call — the watch already mailed it and moved on.)</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= MODULE 4 ======================= -->
+<section class="module" id="m4" data-title="Teaching">
+  <div class="wrap">
+    <p class="kicker">Module 4 · Machine learning</p>
+    <h2>Teaching the machine</h2>
+    <p class="lede">Now there's a pile of CSVs full of numbers. How do they become a model that recognizes "cable curl"? This is <span class="term" data-term="supervised">supervised learning</span> — learning from examples that already have the right answer attached.</p>
+
+    <h3>Step 1 — Label every sample</h3>
+    <p>Each row of motion gets tagged with the exercise it belongs to. The trainer looks at the set intervals (start → end) and stamps every reading inside one with that exercise; everything else is <span class="mono">rest</span>. It even trims the edges of each set, so the fumbling as you tap the button isn't learned as part of the lift.</p>
+
+    <div class="cx">
+<pre><span class="cmt"># Tag each reading with the exercise of the</span>
+<span class="cmt"># set it falls in, else REST.</span>
+<span class="k">for</span> row <span class="k">in</span> sets:
+    inside = (t &gt;= row.start_ms) &amp; (t &lt;= row.end_ms)
+    labels[inside] = row.exercise
+
+<span class="cmt"># windows touching a "discard" set are dropped</span></pre>
+      <div class="eng">
+        <span class="h">In plain English</span>
+        <p>"Every motion reading whose timestamp lands between this set's start and end <em>is</em> this exercise." The one-clock rule from Module 3 is what makes this comparison valid.</p>
+      </div>
+    </div>
+
+    <h3>Step 2 — Slice into windows</h3>
+    <p>A model can't look at one instant and know the exercise — it needs to see a little movie of motion. So the trainer slides a <b>2-second window</b> (100 samples) across the stream, stepping halfway each time so windows overlap. A window keeps a label only if 80% of it agrees — straddle a boundary and it's tossed.</p>
+
+    <div class="viz">
+      <canvas id="win-canvas" height="150"></canvas>
+      <div class="cap">
+        <span class="legend"><span><i class="dot" style="background:#fab387"></i>2-sec window slides →, 50% overlap</span></span>
+        <span id="win-label">window label: —</span>
+      </div>
+    </div>
+
+    <h3>Step 3 — Split by person, not by window</h3>
+    <p>To know if the model really learned, you test it on data it never trained on. But there's a trap: if your training set and test set share the <em>same person</em>, the model can cheat by memorizing that person's quirks. LiftLogger splits by <b>subject</b> — so the test is always a brand-new body.</p>
+
+    <div class="callout green">
+      <span class="lbl">Aha — overfitting & honest evaluation</span>
+      <p><span class="term" data-term="overfit">Overfitting</span> is when a model memorizes its study material instead of learning the real pattern — it aces practice and flunks the real test. Splitting by person is like making sure your exam is written by someone whose practice problems you never saw. When an AI tells you "98% accuracy!", your first question should be <span class="why">"accuracy on data it had never seen — including new <em>people</em>?"</span></p>
+    </div>
+
+    <h3>The model itself: small on purpose</h3>
+    <p>The brain is a <span class="term" data-term="cnn">convolutional neural network</span> with only ~150,000 dials (huge models have billions). It's deliberately tiny so it runs instantly on a watch and doesn't <span class="term" data-term="overfit">overfit</span> a small dataset. It's also "translation-invariant" — it doesn't care <em>where</em> in the window a rep happens, only that the pattern is there.</p>
+
+    <div class="quiz" data-quiz>
+      <div class="qlabel">Quick check</div>
+      <p class="q">Why does LiftLogger split its data so that no single person appears in both training and testing?</p>
+      <button class="opt" data-correct="false">To make training run faster <span class="mark"></span></button>
+      <button class="opt" data-correct="true">So the test honestly measures how it does on a brand-new user, not on memorized quirks <span class="mark"></span></button>
+      <button class="opt" data-correct="false">Because each person can only be in one file <span class="mark"></span></button>
+      <div class="explain"><b>Yes.</b> If the same person is in both sets, the model can score well by recognizing <em>that individual</em> rather than the exercise — an optimistic, misleading number. Holding people out gives you the honest "will this work for someone we've never met?" estimate. The code even prints a warning when there aren't enough subjects to do this.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= MODULE 5 ======================= -->
+<section class="module" id="m5" data-title="The Brain">
+  <div class="wrap">
+    <p class="kicker">Module 5 · On-device AI</p>
+    <h2>The brain on your wrist</h2>
+    <p class="lede">A trained model on a laptop is useless to a lifter. The last mile is shrinking it into a <span class="term" data-term="coreml">Core ML</span> file the watch can run live — and that's where some clever engineering hides.</p>
+
+    <h3>Bake the recipe into the cake</h3>
+    <p>Before training, every number is <span class="term" data-term="normalize">normalized</span> — rescaled so the model sees tidy values. But the watch only has raw sensor readings. Rather than make the Swift code re-do that math (and risk getting it subtly wrong), the export step <b>bakes the normalization right into the model</b>. The watch hands over raw numbers; the model normalizes them internally and returns probabilities.</p>
+
+    <div class="cx">
+<pre><span class="k">def</span> <span class="f">forward</span>(self, x):
+    x = x.transpose(1, 2)         <span class="cmt"># reshape</span>
+    x = (x - self.mean) / self.std <span class="cmt"># normalize</span>
+    <span class="k">return</span> torch.softmax(self.model(x), 1)</pre>
+      <div class="eng">
+        <span class="h">In plain English</span>
+        <p>The shipped model carries its own "recipe" (the training mean &amp; std) inside it. Raw sensor data goes in; clean probabilities come out — no chance for the watch and the trainer to disagree on the math.</p>
+      </div>
+    </div>
+
+    <h3>Predicting, twice a second</h3>
+    <p>Live, the watch keeps a rolling buffer of the last 100 samples and runs the model every 25 new samples — about <b>twice a second</b>. Each run returns a guessed exercise and a <span class="term" data-term="confidence">confidence</span> (how sure it is, 0–100%).</p>
+
+    <div class="flow" id="flow-infer" data-steps='[
+      {"icon":"📊","t":"Window","s":"last 100","detail":"The newest 2 seconds of motion is kept in a rolling buffer, always ready to classify."},
+      {"icon":"🧠","t":"Core ML","s":"predict()","detail":"Every 25 samples the model runs on the wrist and returns a guessed exercise + a confidence score."},
+      {"icon":"🚦","t":"Threshold","s":"≥ 60%?","detail":"Below 60% confidence the guess is treated as <b>rest</b> — the app refuses to log shaky guesses."},
+      {"icon":"🔁","t":"Debounce","s":"2 in a row","detail":"It must see the <b>same</b> confident answer twice before committing — one flickered frame can’t open or close a set."},
+      {"icon":"✅","t":"Open / close set","s":"+ haptic","detail":"A stable change opens a new detected set (or closes the current one) and buzzes your wrist."}
+    ]'>
+      <div class="track"></div>
+      <div class="detail">Press play to watch a guess become a committed decision.</div>
+      <div class="controls">
+        <button class="play">▶ play flow</button>
+        <span class="step-count"></span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="lbl">Aha — debouncing</span>
+      <p>A raw model output flickers frame to frame. <span class="term" data-term="debounce">Debouncing</span> means: don't act on a change until it's held steady for a beat. It's the same trick behind a light switch that ignores contact bounce, or a search box that waits until you stop typing. Whenever you tell an AI "make this react to live input," ask: <span class="why">should it act instantly, or wait for the signal to settle?</span></p>
+    </div>
+
+    <div class="quiz" data-quiz>
+      <div class="qlabel">Quick check</div>
+      <p class="q">The model briefly flashes "shoulder press" for a single frame while you're actually resting. Why doesn't the app log a set?</p>
+      <button class="opt" data-correct="true">Debouncing — it needs the same confident answer twice in a row before it commits <span class="mark"></span></button>
+      <button class="opt" data-correct="false">The watch only checks once per minute <span class="mark"></span></button>
+      <button class="opt" data-correct="false">Shoulder press isn’t one of the exercises <span class="mark"></span></button>
+      <div class="explain"><b>Correct.</b> A one-frame flicker never survives the "twice in a row" rule, and a low-confidence guess is treated as rest anyway. Together, the confidence threshold and the debounce filter stop noisy single frames from creating phantom sets.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= MODULE 6 ======================= -->
+<section class="module" id="m6" data-title="Counting Reps">
+  <div class="wrap">
+    <p class="kicker">Module 6 · Two algorithms</p>
+    <h2>Counting reps, two ways</h2>
+    <p class="lede">The classifier answers <em>which</em> exercise. A different problem is <em>how many</em> reps. LiftLogger solves it two ways — and falls back gracefully from the fancy one to the simple one.</p>
+
+    <h3>Way 1 — Listen to the rhythm (no labels needed)</h3>
+    <p>A rep is one cycle of a repeating motion. So the simple counter finds the most rhythmic sensor channel, measures how long one cycle takes (its <span class="term" data-term="period">period</span>) using <span class="term" data-term="autocorr">autocorrelation</span>, and divides: reps ≈ total time ÷ time-per-rep. No training data required — it just hears the beat.</p>
+
+    <div class="viz">
+      <canvas id="rep-canvas" height="150"></canvas>
+      <div class="cap">
+        <span class="legend"><span><i class="dot" style="background:#a6e3a1"></i>wrist motion</span><span><i class="dot" style="background:#f38ba8"></i>detected rep</span></span>
+        <span id="rep-count">reps: 0</span>
+      </div>
+    </div>
+
+    <h3>Way 2 — Learn from a human clicking along</h3>
+    <p>The accurate way uses <span class="term" data-term="groundtruth">ground truth</span>. While you lift, an observer holds the phone's "rep tagger" and taps once per rep. Those taps (mapped onto the watch's clock via the anchor from Module 3) train a second model that emits one bump per rep. Add the bumps up — that's your rep count.</p>
+
+    <div class="cx">
+<pre><span class="cmt">// Prefer the trained model; fall back to the</span>
+<span class="cmt">// rhythm counter if it isn't bundled yet.</span>
+<span class="k">let</span> reps = repModel.count(samples, fs: 50)
+        ?? repCounter.count(samples, fs: 50)</pre>
+      <div class="eng">
+        <span class="h">In plain English</span>
+        <p>"Try the smart counter. If it isn't installed, use the simple one instead." The <span class="mono">??</span> is a fallback: it never crashes for lack of the fancy model — it just degrades to good-enough.</p>
+      </div>
+    </div>
+
+    <div class="callout blue">
+      <span class="lbl">Aha — graceful fallback</span>
+      <p>Good systems have a <span class="why">plan B that's automatic.</span> The watch tries the trained density model; if that file isn't on the device, it silently uses the rhythm counter. Users never see an error — just a slightly less precise count. "What's the fallback if this isn't available?" is a question worth asking of every feature you build with an AI.</p>
+    </div>
+
+    <h3>The whole loop, closed</h3>
+    <p>And that's LiftLogger end to end — a system that improves itself: the more you record and tag, the better the next trained model, the better the live detection that collects the next batch.</p>
+    <div class="loop-ring">
+      <span class="step"><b>1</b> Record on watch</span>
+      <span class="step"><b>2</b> Tag reps on phone</span>
+      <span class="step"><b>3</b> Train on laptop</span>
+      <span class="step"><b>4</b> Bake → Core ML</span>
+      <span class="step"><b>5</b> Detect live on watch</span>
+      <span class="step">↻ repeat</span>
+    </div>
+
+    <div class="quiz" data-quiz>
+      <div class="qlabel">Quick check</div>
+      <p class="q">The accurate rep-counting model hasn't been added to the watch yet. What happens when you finish a set?</p>
+      <button class="opt" data-correct="false">The app crashes because the model is missing <span class="mark"></span></button>
+      <button class="opt" data-correct="false">Reps show as 0 until you install it <span class="mark"></span></button>
+      <button class="opt" data-correct="true">It quietly falls back to the rhythm-based counter and still gives you a number <span class="mark"></span></button>
+      <div class="explain"><b>Right.</b> The <span class="mono">??</span> fallback means a missing model is a non-event: the unsupervised rhythm counter takes over automatically. No crash, no zero — just a slightly less precise count. That's graceful degradation in action.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= END ======================= -->
+<section class="module" id="end" data-title="Done">
+  <div class="wrap">
+    <p class="kicker">You finished</p>
+    <h2>You can now read this whole system</h2>
+    <p class="lede" style="margin:0 auto">From a wrist sensor ticking 50 times a second, to a tiny neural network, to a self-improving loop — you've seen every layer of how LiftLogger works.</p>
+    <div class="loop-ring" style="margin-top:30px">
+      <span class="step">state machines</span>
+      <span class="step">buffer &amp; flush</span>
+      <span class="step">store-and-forward</span>
+      <span class="step">supervised learning</span>
+      <span class="step">overfitting</span>
+      <span class="step">on-device inference</span>
+      <span class="step">debouncing</span>
+      <span class="step">graceful fallback</span>
+    </div>
+    <p class="small" style="max-width:56ch;margin:26px auto 0">Every one of those is a phrase you can now hand to an AI coding tool — and a smell you can now catch when it gets something wrong.</p>
+  </div>
+</section>
+
+<footer>
+  LiftLogger · Under the Hood — an interactive course · scroll up to revisit any module
+</footer>
+
+</main>
+
+<script>
+/* =========================================================
+   Glossary
+   ========================================================= */
+const GLOSSARY = {
+  dotted:"This! Hover any dotted-underlined word for a plain-English definition.",
+  imu:"<b>IMU (Inertial Measurement Unit):</b> a tiny chip that senses motion — combining an accelerometer (how fast it speeds up) and a gyroscope (how fast it rotates).",
+  hz:"<b>Hertz (Hz):</b> times per second. 50 Hz means the sensor is read 50 times every second.",
+  statemachine:"<b>State machine:</b> a design where the program is always in exactly one named mode, and only certain transitions between modes are allowed — illegal jumps become impossible.",
+  observable:"<b>Observable object:</b> a bundle of data the screen automatically watches. Change the data and the UI redraws itself — no manual refresh.",
+  buffer:"<b>Buffer:</b> a temporary holding area in memory where items pile up before being processed or saved in a batch.",
+  flush:"<b>Flush:</b> to write everything sitting in a buffer out to its destination (here, the disk) all at once.",
+  wc:"<b>WatchConnectivity:</b> Apple's system for sending messages and files between a Watch and its paired iPhone — works in the background, no internet needed.",
+  uptime:"<b>Time-since-boot clock:</b> a timer counting how long the device has been on. Reliable for ordering events on one device because it never jumps around like wall-clock time can.",
+  supervised:"<b>Supervised learning:</b> teaching a model from examples that already have the correct answer attached (here, motion labeled with its exercise).",
+  cnn:"<b>Convolutional neural network (CNN):</b> a type of model that scans for patterns in a signal regardless of where they occur — great for images and motion streams.",
+  overfit:"<b>Overfitting:</b> when a model memorizes its training examples instead of the real pattern — it looks great on practice data and fails on anything new.",
+  normalize:"<b>Normalize:</b> rescale numbers to a common, tidy range so the model isn't thrown off by some channels being naturally larger than others.",
+  coreml:"<b>Core ML:</b> Apple's framework for running a trained machine-learning model efficiently on-device — no server, no internet.",
+  confidence:"<b>Confidence:</b> how sure the model is about its guess, from 0 to 100%. Low confidence guesses get ignored.",
+  debounce:"<b>Debounce:</b> ignore a change until it has held steady for a moment, so brief flickers don't trigger actions.",
+  period:"<b>Period:</b> the time it takes to complete one cycle of a repeating motion — here, one rep.",
+  autocorr:"<b>Autocorrelation:</b> a math technique that finds how often a signal repeats by sliding it against itself and seeing where it best lines up.",
+  groundtruth:"<b>Ground truth:</b> the known-correct answer, gathered by a human, used to teach or grade a model. Here: a person tapping once per rep.",
+};
+(function(){
+  const tip=document.getElementById('tip');
+  let hideT;
+  function show(el){
+    const key=el.dataset.term, def=GLOSSARY[key];
+    if(!def) return;
+    tip.innerHTML=def; tip.style.opacity='1';
+    const r=el.getBoundingClientRect();
+    let top=r.bottom+10, left=r.left;
+    tip.style.left='-9999px'; // measure
+    const tw=tip.offsetWidth, th=tip.offsetHeight;
+    left=Math.min(Math.max(8,left), window.innerWidth-tw-8);
+    if(top+th>window.innerHeight-8) top=r.top-th-10;
+    tip.style.left=left+'px'; tip.style.top=top+'px';
+  }
+  function hide(){tip.style.opacity='0';}
+  document.querySelectorAll('.term').forEach(el=>{
+    el.addEventListener('mouseenter',()=>{clearTimeout(hideT);show(el);});
+    el.addEventListener('mouseleave',()=>{hideT=setTimeout(hide,120);});
+    el.addEventListener('click',e=>{e.stopPropagation();show(el);clearTimeout(hideT);hideT=setTimeout(hide,4000);});
+  });
+  tip.addEventListener('mouseenter',()=>clearTimeout(hideT));
+  tip.addEventListener('mouseleave',hide);
+})();
+
+/* =========================================================
+   Progress bar + nav dots + scroll spy
+   ========================================================= */
+(function(){
+  const modules=[...document.querySelectorAll('.module')];
+  const nav=document.getElementById('nav');
+  const prog=document.getElementById('progress');
+  modules.forEach((m,i)=>{
+    const b=document.createElement('button');
+    b.className='nav-dot';
+    b.innerHTML='<span>'+(m.dataset.title||('Section '+i))+'</span>';
+    b.addEventListener('click',()=>m.scrollIntoView({behavior:'smooth'}));
+    nav.appendChild(b);
+  });
+  const dots=[...nav.children];
+  function onScroll(){
+    const h=document.documentElement;
+    prog.style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%';
+    let active=0, mid=window.innerHeight/2;
+    modules.forEach((m,i)=>{const r=m.getBoundingClientRect();if(r.top<=mid)active=i;});
+    dots.forEach((d,i)=>d.classList.toggle('active',i===active));
+  }
+  window.addEventListener('scroll',onScroll,{passive:true});
+  window.addEventListener('resize',onScroll);
+  onScroll();
+})();
+
+/* =========================================================
+   Quizzes
+   ========================================================= */
+document.querySelectorAll('[data-quiz]').forEach(q=>{
+  const opts=[...q.querySelectorAll('.opt')];
+  opts.forEach(o=>o.addEventListener('click',()=>{
+    if(q.classList.contains('answered'))return;
+    q.classList.add('answered');
+    opts.forEach(other=>{
+      const correct=other.dataset.correct==='true';
+      if(correct)other.classList.add('correct');
+      else if(other===o)other.classList.add('wrong');
+    });
+  }));
+});
+
+/* =========================================================
+   Group chat — reveal bubbles on view
+   ========================================================= */
+function runChat(chat){
+  const stream=chat.querySelector('.stream');
+  const data=JSON.parse(chat.dataset.chat);
+  stream.innerHTML='';
+  let i=0;
+  function next(){
+    if(i>=data.length)return;
+    const typing=document.createElement('div');
+    typing.className='typing';
+    typing.innerHTML='<i></i><i></i><i></i>';
+    const m=data[i];
+    typing.style.alignSelf=m.side==='right'?'flex-end':m.side==='mid'?'center':'flex-start';
+    stream.appendChild(typing);
+    setTimeout(()=>{
+      typing.remove();
+      const b=document.createElement('div');
+      b.className='bubble '+m.side;
+      b.innerHTML='<span class="who">'+m.who+'</span>'+m.text;
+      stream.appendChild(b);
+      i++;
+      setTimeout(next, 650);
+    }, 620);
+  }
+  next();
+}
+document.querySelectorAll('.chat').forEach(chat=>{
+  chat.querySelector('.replay').addEventListener('click',()=>runChat(chat));
+  const io=new IntersectionObserver((es)=>{
+    es.forEach(e=>{if(e.isIntersecting){runChat(chat);io.disconnect();}});
+  },{threshold:.4});
+  io.observe(chat);
+});
+
+/* =========================================================
+   Flow animations
+   ========================================================= */
+document.querySelectorAll('.flow').forEach(flow=>{
+  const steps=JSON.parse(flow.dataset.steps);
+  const track=flow.querySelector('.track');
+  const detail=flow.querySelector('.detail');
+  const btn=flow.querySelector('.play');
+  const counter=flow.querySelector('.step-count');
+  const nodes=steps.map((s,i)=>{
+    const n=document.createElement('div');
+    n.className='fnode';
+    n.innerHTML='<span class="icon">'+s.icon+'</span><span class="t">'+s.t+'</span><span class="s">'+s.s+'</span>';
+    track.appendChild(n);
+    return n;
+  });
+  let timer=null;
+  function lightStep(i){
+    nodes.forEach((n,j)=>n.classList.toggle('lit',j===i));
+    detail.innerHTML=steps[i].detail;
+    counter.textContent='step '+(i+1)+' / '+steps.length;
+  }
+  function play(){
+    clearInterval(timer);
+    let i=0; lightStep(0);
+    timer=setInterval(()=>{
+      i++;
+      if(i>=steps.length){clearInterval(timer);return;}
+      lightStep(i);
+    },1500);
+  }
+  btn.addEventListener('click',play);
+  const io=new IntersectionObserver((es)=>{
+    es.forEach(e=>{if(e.isIntersecting){play();io.disconnect();}});
+  },{threshold:.35});
+  io.observe(flow);
+});
+
+/* =========================================================
+   Canvas visualizations
+   ========================================================= */
+/* -- Module 1: scrolling IMU traces -- */
+(function(){
+  const c=document.getElementById('imu-canvas'); if(!c)return;
+  const ctx=c.getContext('2d');
+  const counterEl=document.getElementById('imu-counter');
+  let W,H,dpr, t=0, running=false, samples=0;
+  const colors=['#f38ba8','#f5a3b8','#f9c0cd','#89b4fa','#a6c8fb','#c3dbfc'];
+  const phase=colors.map((_,i)=>Math.random()*6);
+  const freq=colors.map((_,i)=>0.6+ (i%3)*0.25 + (i<3?0:0.4));
+  function size(){dpr=window.devicePixelRatio||1;W=c.clientWidth;H=150;c.width=W*dpr;c.height=H*dpr;c.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0);}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // grid
+    ctx.strokeStyle='rgba(180,180,210,.12)';ctx.lineWidth=1;
+    for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    colors.forEach((col,ci)=>{
+      ctx.strokeStyle=col;ctx.lineWidth=1.6;ctx.beginPath();
+      for(let x=0;x<W;x++){
+        const tt=t - (W-x)*0.03;
+        const base=H/2 + (ci-2.5)*6;
+        const y=base + Math.sin(tt*freq[ci]+phase[ci])*16*Math.sin(tt*0.21+ci) + Math.sin(tt*freq[ci]*2.3+ci)*5;
+        x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    });
+    // sampling tick marks at right edge
+    ctx.fillStyle='rgba(205,214,244,.9)';
+    t+=0.6;
+    if(running){samples+=3; counterEl.textContent='samples written: '+samples.toLocaleString();}
+    requestAnimationFrame(draw);
+  }
+  size();window.addEventListener('resize',size);
+  const io=new IntersectionObserver(es=>es.forEach(e=>running=e.isIntersecting),{threshold:.2});
+  io.observe(c);
+  draw();
+})();
+
+/* -- Module 4: sliding window over a labeled signal -- */
+(function(){
+  const c=document.getElementById('win-canvas'); if(!c)return;
+  const ctx=c.getContext('2d');
+  const labelEl=document.getElementById('win-label');
+  let W,H,dpr,winX=0,dir=1,running=false;
+  // signal: rest (flat) | exercise (wavy) | rest
+  function val(x){
+    const seg=x/W;
+    if(seg<0.28||seg>0.72) return H/2 + (Math.random()-.5)*3;        // rest
+    return H/2 + Math.sin(x*0.18)*26;                                 // exercise
+  }
+  const pts=[];
+  function size(){dpr=window.devicePixelRatio||1;W=c.clientWidth;H=130;c.width=W*dpr;c.height=H*dpr;c.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0);
+    pts.length=0;for(let x=0;x<W;x++)pts.push(val(x));}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // exercise region shading
+    ctx.fillStyle='rgba(166,227,161,.12)';ctx.fillRect(W*0.28,0,W*0.44,H);
+    // signal
+    ctx.strokeStyle='#a6e3a1';ctx.lineWidth=1.8;ctx.beginPath();
+    pts.forEach((y,x)=>x===0?ctx.moveTo(x,y):ctx.lineTo(x,y));ctx.stroke();
+    // window
+    const ww=W*0.2;
+    ctx.fillStyle='rgba(250,179,135,.18)';ctx.strokeStyle='#fab387';ctx.lineWidth=2;
+    ctx.fillRect(winX,8,ww,H-16);ctx.strokeRect(winX,8,ww,H-16);
+    // label
+    const center=(winX+ww/2)/W;
+    const inEx=center>0.28&&center<0.72;
+    labelEl.textContent='window label: '+(inEx?'incline_chest_press':'rest');
+    labelEl.style.color=inEx?'#a6e3a1':'#9aa0c0';
+    if(running){winX+=dir*1.4; if(winX+ww>W){winX=W-ww;dir=-1;} if(winX<0){winX=0;dir=1;}}
+    requestAnimationFrame(draw);
+  }
+  size();window.addEventListener('resize',size);
+  const io=new IntersectionObserver(es=>es.forEach(e=>running=e.isIntersecting),{threshold:.2});
+  io.observe(c);
+  draw();
+})();
+
+/* -- Module 6: periodic wave with rep peaks -- */
+(function(){
+  const c=document.getElementById('rep-canvas'); if(!c)return;
+  const ctx=c.getContext('2d');
+  const countEl=document.getElementById('rep-count');
+  let W,H,dpr,scan=0,running=false,reps=0;
+  function size(){dpr=window.devicePixelRatio||1;W=c.clientWidth;H=130;c.width=W*dpr;c.height=H*dpr;c.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0);}
+  function yAt(x){return H/2 - Math.sin(x*0.045)*30 - Math.sin(x*0.09)*6;}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='#a6e3a1';ctx.lineWidth=1.8;ctx.beginPath();
+    for(let x=0;x<W;x++){x===0?ctx.moveTo(x,yAt(x)):ctx.lineTo(x,yAt(x));}
+    ctx.stroke();
+    // compute crest positions analytically; light them as the scan line passes
+    reps=0;
+    const peaks=[];
+    for(let x=2;x<W-1;x++){if(yAt(x)<yAt(x-1)&&yAt(x)<=yAt(x+1))peaks.push(x);}
+    peaks.forEach(px=>{
+      if(px<=scan){
+        ctx.fillStyle='#f38ba8';ctx.beginPath();ctx.arc(px,yAt(px),5,0,7);ctx.fill();
+        reps++;
+      }
+    });
+    // scan line
+    ctx.strokeStyle='rgba(250,179,135,.7)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(scan,0);ctx.lineTo(scan,H);ctx.stroke();
+    countEl.textContent='reps: '+reps;
+    if(running){scan+=1.6; if(scan>W+40)scan=0;}
+    requestAnimationFrame(draw);
+  }
+  size();window.addEventListener('resize',size);
+  const io=new IntersectionObserver(es=>es.forEach(e=>running=e.isIntersecting),{threshold:.2});
+  io.observe(c);
+  draw();
+})();
+
+/* dismiss tooltip on outside click */
+document.addEventListener('click',()=>{document.getElementById('tip').style.opacity='0';});
+</script>
+</body>
+</html>

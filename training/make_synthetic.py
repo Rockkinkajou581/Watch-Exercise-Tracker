@@ -55,14 +55,16 @@ def main():
                     readings.append([subj, session, trest[i] * 1000, *rsig[i]])
                 t += 3.0
 
-                sig, times, dur = synth_set(ex, t)
+                n_reps = int(rng.integers(8, 13))     # vary 8–12 so rep eval is real
+                sig, times, dur = synth_set(ex, t, n_reps=n_reps)
                 for i in range(len(sig)):
                     readings.append([subj, session, times[i], *sig[i]])
-                sets.append([subj, session, ex, times[0], times[-1]])
+                sets.append([subj, session, ex, times[0], times[-1], n_reps])
                 t += dur
 
     pd.DataFrame(readings, columns=rcols).to_csv(config.READINGS_CSV, index=False)
-    pd.DataFrame(sets, columns=["subject", "session", "exercise", "start_ms", "end_ms"]
+    pd.DataFrame(sets,
+                 columns=["subject", "session", "exercise", "start_ms", "end_ms", "reps"]
                  ).to_csv(config.SETS_CSV, index=False)
     print(f"wrote {config.READINGS_CSV}  ({len(readings)} rows)")
     print(f"wrote {config.SETS_CSV}  ({len(sets)} rows)")

@@ -16,14 +16,54 @@
 
 import Foundation
 import Combine
+import CoreML
 import CoreMotion
-import HealthKit
+// HealthKit removed for free-account testing (HealthKit is a restricted
+// entitlement requiring a paid Apple Developer Program membership).
+// import HealthKit
 import WatchConnectivity
 import WatchKit
 
 final class RecorderModel: NSObject, ObservableObject {
 
-    enum Phase { case idle, resting, inSet }
+    enum Phase { case idle, resting, countdown, inSet, enteringReps, autoDetecting }
+
+    /// Reserved label for sets the user marks as bad. Training drops any window
+    /// touching a discard interval. MUST match config.DISCARD_LABEL in the Python.
+    static let discardLabel = "discard"
+
+    /// The model's idle class. MUST match config.REST_LABEL in the Python.
+    static let restLabel = "rest"
+
+    // MARK: - live auto-detect tuning (must stay consistent with the trainer)
+    /// Samples per inference window. MUST match config.WINDOW (2 s @ 50 Hz).
+    static let windowSize = 100
+    /// Channels per sample. MUST match config.N_CHANNELS / CHANNELS order.
+    static let nChannels = 6
+    /// Sample rate. MUST match config.FS and motion.deviceMotionUpdateInterval.
+    static let fs = 50
+    /// Frames a bout is resampled to for the supervised rep-density model.
+    /// MUST match config.REP_BOUT_LEN.
+    static let repBoutLen = 256
+    /// Default rep count pre-filled on the End Set screen (manual sessions).
+    static let defaultReps = 8
+    /// Run a prediction every this many new samples (~2x/sec at 50 Hz).
+    private let inferenceStride = 25
+    /// Below this top-class probability, a window is treated as rest (don't log guesses).
+    private let liveConfidenceThreshold = 0.6
+    /// Consecutive agreeing predictions before we commit a start/stop transition (debounce).
+    private let commitWindows = 2
+    /// Detected sets shorter than this are treated as noise and not logged.
+    private let minDetectedMS = 1500.0
+    /// Samples of lead-in kept before a bout commits, so its first reps aren't missed.
+    private let repLeadSamples = 150
+    /// Hard cap on a single bout's buffered samples (~120 s at 50 Hz).
+    private let maxBoutSamples = 6000
+
+    /// Seconds counted down (3-2-1) after tapping an exercise, before the set
+    /// window actually starts — gives you time to get into position so the
+    /// front of every set is clean (the training trim no longer cuts the front).
+    static let countdownSeconds = 3
 
     // MARK: - UI state (mutate on main thread only)
     @Published var phase: Phase = .idle
@@ -31,17 +71,29 @@ final class RecorderModel: NSObject, ObservableObject {
     @Published var sessionID: String = ""
     @Published var currentExercise: String = ""
     @Published var setStartDate: Date = Date()
+    @Published var countdownRemaining: Int = 0   // shown during .countdown
     @Published var sampleCount: Int = 0
     @Published var setCount: Int = 0
+    @Published var canDiscardLast: Bool = false   // true after a set, until discarded/new set
+    @Published var repsEntry: Int = RecorderModel.defaultReps   // editable on the End Set screen
     @Published var status: String = "ready"
     @Published var pendingFiles: [URL] = []   // recorded but not yet transferred
 
+    // Live auto-detect UI state (mutate on main thread only)
+    @Published var liveExercise: String = "—"   // model's current top class
+    @Published var liveConfidence: Double = 0    // its probability, 0…1
+    @Published var detectedCount: Int = 0        // sets the model has logged this session
+    @Published var lastDetectedReps: Int = 0     // reps counted for the most recent logged set
+
     /// Edit to change the exercises offered on the watch.
-    /// Do NOT name one "rest" — the transform script reserves that label
-    /// for everything outside a set.
+    /// Do NOT name one "rest" or "discard" — the transform script reserves those
+    /// labels (rest = outside any set; discard = a set marked bad).
     let exercises = [
-        "bicep_curl", "hammer_curl", "shoulder_press", "lateral_raise",
-        "tricep_pushdown", "bent_over_row", "chest_press",
+        "incline_chest_press", "flat_chest_press", "machine_shoulder_press",
+        "cable_side_delt", "cable_front_delt", "seated_tricep_dips",
+        "overhead_triceps", "cable_push_down", "machine_row_wide",
+        "machine_pull_down", "cable_curl", "dumbbell_hammer_curl",
+        "machine_arm_curl", "wrist_extensions", "forearm_curl", "forearm_raises",
     ]
 
     // MARK: - private
@@ -53,9 +105,7 @@ final class RecorderModel: NSObject, ObservableObject {
         return q
     }()
 
-    private let healthStore = HKHealthStore()
-    private var workoutSession: HKWorkoutSession?
-    private var workoutBuilder: HKLiveWorkoutBuilder?
+    // HealthKit keep-alive disabled for free-account testing.
 
     private var readingsHandle: FileHandle?
     private var setsHandle: FileHandle?
@@ -66,11 +116,35 @@ final class RecorderModel: NSObject, ObservableObject {
     private let flushEvery = 50             // ~1 s of samples at 50 Hz
     private var csvPrefix = ""              // "subject,session", frozen at session start
     private var setStartMS: Double = 0
+    private var countdownTimer: Timer?
+    private var lastSetStartMS: Double?     // boundaries of the most recent completed set,
+    private var lastSetEndMS: Double?       // so it can be discarded after the fact
+    private var pendingSetEndMS: Double = 0 // end of the set awaiting rep entry
+
+    // MARK: - live auto-detect state (touched on workQueue, except @Published mirrors)
+    private let classifier = ExerciseClassifier()
+    private let repCounter = RepCounter()                 // unsupervised fallback
+    private let repModel = RepDensityCounter()            // supervised, if bundled
+    private var leadRing: [[Float]] = []    // recent samples kept for bout lead-in
+    private var boutBuffer: [[Float]]?      // samples of the active bout (nil = none open)
+    private var isAutoSession = false
+    private var ring: [[Float]] = []        // rolling last `windowSize` samples (nChannels each)
+    private var samplesSinceInference = 0
+    private var candidateLabel = RecorderModel.restLabel   // debounced label being voted on
+    private var candidateStreak = 0
+    private var activeLabel: String?        // exercise of the set currently being logged, if any
+    private var activeStartMS: Double = 0
+    private var activeConfSum: Double = 0   // running confidence sum over the active set
+    private var activeConfN = 0
+    private var detectedHandle: FileHandle?
+    private var detectedURL: URL?
 
     private static let readingsHeader =
         "subject,session,time_ms,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z\n"
     private static let setsHeader =
-        "subject,session,exercise,start_ms,end_ms\n"
+        "subject,session,exercise,start_ms,end_ms,reps\n"
+    private static let detectedHeader =
+        "subject,session,exercise,start_ms,end_ms,reps,confidence\n"
 
     private var docsDir: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -98,6 +172,9 @@ final class RecorderModel: NSObject, ObservableObject {
         csvPrefix = "\(subj),\(sid)"
         sampleCount = 0
         setCount = 0
+        canDiscardLast = false
+        lastSetStartMS = nil
+        lastSetEndMS = nil
 
         do {
             try openFiles(sessionID: sid)
@@ -106,40 +183,305 @@ final class RecorderModel: NSObject, ObservableObject {
             return
         }
 
+        isAutoSession = false
+        // Tell the phone "rep tagger" a manual (training) session began, and hand
+        // it a clock anchor (watch uptime ↔ wall clock captured together) so the
+        // observer's phone taps can be mapped back onto this session's IMU timeline.
+        sendPhone([
+            "type": "session_start", "session": sid, "subject": subj,
+            "anchorUptimeMs": ProcessInfo.processInfo.systemUptime * 1000.0,
+            "anchorUnixMs": Date().timeIntervalSince1970 * 1000.0,
+        ])
         startWorkoutKeepAlive()   // keeps app + sensors alive with screen off
         startMotion()
         status = "recording"
         phase = .resting
     }
 
+    // MARK: - auto-detect session (uses the trained model; writes only detected.csv)
+
+    /// Start a session that runs the trained model live: no exercise buttons —
+    /// it watches the IMU stream and logs any exercise it recognizes. Produces
+    /// <session>_detected.csv only, so these (unlabeled-by-hand) sessions can
+    /// never be mistaken for training data.
+    func startAutoSession() {
+        guard classifier.isReady else {
+            status = "AI model not on watch yet — add LiftLoggerClassifier.mlpackage "
+                + "to the Watch App target in Xcode and rebuild."
+            return
+        }
+        let subj = Self.sanitize(subject)
+        let sid = Self.sessionIDNow()
+        subject = subj
+        sessionID = sid
+        csvPrefix = "\(subj),\(sid)"
+        sampleCount = 0
+        detectedCount = 0
+        lastDetectedReps = 0
+        liveExercise = Self.restLabel
+        liveConfidence = 0
+        resetLiveState()
+
+        do {
+            try openDetectedFile(sessionID: sid)
+        } catch {
+            status = "file error: \(error.localizedDescription)"
+            return
+        }
+
+        isAutoSession = true
+        startWorkoutKeepAlive()
+        startMotion()
+        status = "auto-detecting"
+        phase = .autoDetecting
+    }
+
+    private func resetLiveState() {
+        ring.removeAll(keepingCapacity: true)
+        leadRing.removeAll(keepingCapacity: true)
+        boutBuffer = nil
+        samplesSinceInference = 0
+        candidateLabel = Self.restLabel
+        candidateStreak = 0
+        activeLabel = nil
+        activeStartMS = 0
+        activeConfSum = 0
+        activeConfN = 0
+    }
+
+    /// workQueue only. Buffer one sample, and every `inferenceStride` samples run
+    /// the model on the latest full window.
+    private func feedLive(_ sample: [Float], atMS tms: Double) {
+        ring.append(sample)
+        if ring.count > Self.windowSize {
+            ring.removeFirst(ring.count - Self.windowSize)
+        }
+        // Keep a short rolling lead-in, and accumulate the active bout for rep counting.
+        leadRing.append(sample)
+        if leadRing.count > repLeadSamples {
+            leadRing.removeFirst(leadRing.count - repLeadSamples)
+        }
+        if boutBuffer != nil {
+            boutBuffer!.append(sample)
+            if boutBuffer!.count > maxBoutSamples {
+                boutBuffer!.removeFirst(boutBuffer!.count - maxBoutSamples)
+            }
+        }
+        DispatchQueue.main.async { self.sampleCount += 1 }
+
+        samplesSinceInference += 1
+        guard ring.count == Self.windowSize, samplesSinceInference >= inferenceStride else { return }
+        samplesSinceInference = 0
+        guard let (label, conf) = classifier.predict(window: ring) else { return }
+        handlePrediction(rawLabel: label, confidence: conf, atMS: tms)
+    }
+
+    /// workQueue only. Debounced segmentation: a stable non-rest class opens a
+    /// "set"; returning to rest (or switching exercise) closes and logs it.
+    private func handlePrediction(rawLabel: String, confidence: Double, atMS tms: Double) {
+        DispatchQueue.main.async {
+            self.liveExercise = rawLabel
+            self.liveConfidence = confidence
+        }
+
+        // Low-confidence predictions count as rest so we never log a shaky guess.
+        let label = confidence >= liveConfidenceThreshold ? rawLabel : Self.restLabel
+        if label == candidateLabel {
+            candidateStreak += 1
+        } else {
+            candidateLabel = label
+            candidateStreak = 1
+        }
+        guard candidateStreak >= commitWindows else { return }   // not stable yet
+
+        let current = activeLabel ?? Self.restLabel
+        if candidateLabel == current {
+            if activeLabel != nil { activeConfSum += confidence; activeConfN += 1 }
+            return
+        }
+
+        // Stable transition: close whatever was open, then open a new set if non-rest.
+        closeActiveSet(endMS: tms)
+        if candidateLabel != Self.restLabel {
+            activeLabel = candidateLabel
+            activeStartMS = tms
+            activeConfSum = confidence
+            activeConfN = 1
+            boutBuffer = leadRing      // seed with lead-in so the first reps aren't lost
+            WKInterfaceDevice.current().play(.start)
+        }
+    }
+
+    /// workQueue only. Write the active detected set (if long enough) and clear it.
+    private func closeActiveSet(endMS: Double) {
+        guard let label = activeLabel else { return }
+        activeLabel = nil
+        let samples = boutBuffer ?? []
+        boutBuffer = nil
+        guard endMS - activeStartMS >= minDetectedMS else { return }   // blip — ignore
+        // Prefer the trained density model; fall back to unsupervised if it isn't bundled.
+        let reps = repModel.count(samples, fs: Self.fs) ?? repCounter.count(samples, fs: Self.fs)
+        let avgConf = activeConfN > 0 ? activeConfSum / Double(activeConfN) : 0
+        let line = "\(csvPrefix),\(label),"
+            + String(format: "%.1f,%.1f,%d,%.3f\n", activeStartMS, endMS, reps, avgConf)
+        if let h = detectedHandle, let d = line.data(using: .utf8) {
+            try? h.write(contentsOf: d)
+        }
+        DispatchQueue.main.async {
+            self.detectedCount += 1
+            self.lastDetectedReps = reps
+        }
+        WKInterfaceDevice.current().play(.stop)
+    }
+
+    private func openDetectedFile(sessionID: String) throws {
+        let url = docsDir.appendingPathComponent("\(sessionID)_detected.csv")
+        try Self.detectedHeader.data(using: .utf8)!.write(to: url)
+        detectedURL = url
+        detectedHandle = try FileHandle(forWritingTo: url)
+        try detectedHandle?.seekToEnd()
+    }
+
+    private func endAutoSession() {
+        motion.stopDeviceMotionUpdates()
+        stopWorkoutKeepAlive()
+        status = "finishing…"
+        let subj = Self.sanitize(subject)
+        let sid = sessionID
+        workQueue.addOperation { [weak self] in
+            guard let self else { return }
+            // Close any set still open at the moment End Session was tapped.
+            self.closeActiveSet(endMS: ProcessInfo.processInfo.systemUptime * 1000.0)
+            try? self.detectedHandle?.close()
+            self.detectedHandle = nil
+            if let d = self.detectedURL {
+                WCSession.default.transferFile(
+                    d, metadata: ["kind": "detected", "session": sid, "subject": subj])
+            }
+            DispatchQueue.main.async {
+                self.isAutoSession = false
+                self.status = "sending to iPhone… (can take a minute)"
+                self.phase = .idle
+                self.liveExercise = "—"
+                self.scanPending()
+            }
+        }
+    }
+
+    /// Tapping an exercise starts a 3-2-1 countdown (time to get into position)
+    /// before the set window actually opens, so its front edge is clean.
     func startSet(_ exercise: String) {
         guard phase == .resting else { return }
         currentExercise = exercise
+        canDiscardLast = false        // starting a new set retires the previous discard option
+        countdownRemaining = Self.countdownSeconds
+        phase = .countdown
+        WKInterfaceDevice.current().play(.click)
+        countdownTimer?.invalidate()
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.countdownRemaining -= 1
+            if self.countdownRemaining <= 0 {
+                timer.invalidate()
+                self.beginSetRecording()
+            } else {
+                WKInterfaceDevice.current().play(.click)
+            }
+        }
+    }
+
+    /// Bail out during the countdown without recording a set.
+    func cancelCountdown() {
+        guard phase == .countdown else { return }
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        currentExercise = ""
+        phase = .resting
+        WKInterfaceDevice.current().play(.failure)
+    }
+
+    /// Called when the countdown reaches zero: stamp the real set start.
+    private func beginSetRecording() {
+        countdownTimer = nil
         setStartMS = ProcessInfo.processInfo.systemUptime * 1000.0
         setStartDate = Date()
         phase = .inSet
         WKInterfaceDevice.current().play(.start)
+        // Arm the phone tagger: taps from here until set_end belong to this set.
+        sendPhone(["type": "set_start", "exercise": currentExercise, "startMs": setStartMS])
     }
 
+    /// End the set's recording window, then ask for the rep count before logging it.
     func endSet() {
         guard phase == .inSet else { return }
-        let endMS = ProcessInfo.processInfo.systemUptime * 1000.0
-        let startStr = String(format: "%.1f", setStartMS)
-        let endStr = String(format: "%.1f", endMS)
-        let line = "\(csvPrefix),\(currentExercise),\(startStr),\(endStr)\n"
+        pendingSetEndMS = ProcessInfo.processInfo.systemUptime * 1000.0
+        sendPhone(["type": "set_end", "endMs": pendingSetEndMS])   // disarm phone tagger
+        repsEntry = Self.defaultReps
+        phase = .enteringReps
+        WKInterfaceDevice.current().play(.stop)
+    }
+
+    func incrementReps() { repsEntry = min(repsEntry + 1, 99) }
+    func decrementReps() { repsEntry = max(repsEntry - 1, 0) }
+
+    /// Confirm the rep count from the End Set screen and write the set.
+    func confirmReps() {
+        guard phase == .enteringReps else { return }
+        finalizeSet()
+        WKInterfaceDevice.current().play(.success)
+    }
+
+    /// Write the pending set (with `repsEntry`) and return to resting. Shared by the
+    /// rep-entry screen and by End Session auto-closing an open set.
+    private func finalizeSet() {
+        writeSetRow(exercise: currentExercise, startMS: setStartMS,
+                    endMS: pendingSetEndMS, reps: repsEntry)
+        lastSetStartMS = setStartMS       // remember it so it can be discarded after the fact
+        lastSetEndMS = pendingSetEndMS
+        canDiscardLast = true
+        setCount += 1
+        currentExercise = ""
+        phase = .resting
+    }
+
+    /// Mark the most recently completed set as bad. Its readings stay in
+    /// readings.csv, but a "discard" interval is logged so training drops every
+    /// window touching it (instead of mislabeling that motion as rest).
+    func discardLastSet() {
+        guard let start = lastSetStartMS, let end = lastSetEndMS else { return }
+        writeSetRow(exercise: Self.discardLabel, startMS: start, endMS: end, reps: 0)
+        lastSetStartMS = nil              // prevent discarding the same set twice
+        lastSetEndMS = nil
+        canDiscardLast = false
+        setCount = max(0, setCount - 1)
+        WKInterfaceDevice.current().play(.failure)
+        setStatus("last set discarded")
+    }
+
+    private func writeSetRow(exercise: String, startMS: Double, endMS: Double, reps: Int) {
+        let line = "\(csvPrefix),\(exercise),"
+            + String(format: "%.1f,%.1f,%d\n", startMS, endMS, reps)
         workQueue.addOperation { [weak self] in
             guard let self, let h = self.setsHandle,
                   let d = line.data(using: .utf8) else { return }
             try? h.write(contentsOf: d)
         }
-        setCount += 1
-        currentExercise = ""
-        phase = .resting
-        WKInterfaceDevice.current().play(.stop)
     }
 
     func endSession() {
-        if phase == .inSet { endSet() }   // auto-close an open set
+        countdownTimer?.invalidate()      // in case a countdown was mid-flight
+        countdownTimer = nil
+        if isAutoSession { endAutoSession(); return }
+        // Auto-close a set still open or awaiting reps, using the default count.
+        if phase == .inSet {
+            pendingSetEndMS = ProcessInfo.processInfo.systemUptime * 1000.0
+            sendPhone(["type": "set_end", "endMs": pendingSetEndMS])
+            repsEntry = Self.defaultReps
+            finalizeSet()
+        } else if phase == .enteringReps {
+            finalizeSet()
+        }
+        sendPhone(["type": "session_end"])   // phone closes & files this session's reps.csv
         stopWorkoutKeepAlive()
         motion.stopDeviceMotionUpdates()
         status = "finishing…"
@@ -206,6 +548,15 @@ final class RecorderModel: NSObject, ObservableObject {
             let ay = dm.userAcceleration.y + dm.gravity.y
             let az = dm.userAcceleration.z + dm.gravity.z
             let r = dm.rotationRate   // rad/s
+
+            // Auto-detect session: feed the live classifier, don't write readings.
+            if self.isAutoSession {
+                self.feedLive(
+                    [Float(ax), Float(ay), Float(az), Float(r.x), Float(r.y), Float(r.z)],
+                    atMS: tms)
+                return
+            }
+
             let line = String(
                 format: "%@,%.1f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
                 prefix, tms, ax, ay, az, r.x, r.y, r.z)
@@ -251,56 +602,28 @@ final class RecorderModel: NSObject, ObservableObject {
 
     // MARK: - HealthKit workout keep-alive
 
-    private func requestHealthAuthorization() {
-        guard HKHealthStore.isHealthDataAvailable() else {
-            setStatus("HealthKit unavailable")
-            return
-        }
-        healthStore.requestAuthorization(
-            toShare: [HKObjectType.workoutType()], read: nil
-        ) { [weak self] ok, _ in
-            if !ok { self?.setStatus("Health auth denied — screen sleep may pause recording") }
-        }
-    }
+    // No-ops while HealthKit is stripped for free-account testing.
+    // Without the workout-session keep-alive, watchOS may suspend the app when
+    // the screen sleeps, so keep the watch screen awake during sets.
+    private func requestHealthAuthorization() {}
 
-    private func startWorkoutKeepAlive() {
-        let cfg = HKWorkoutConfiguration()
-        cfg.activityType = .traditionalStrengthTraining
-        cfg.locationType = .indoor
-        do {
-            let session = try HKWorkoutSession(healthStore: healthStore, configuration: cfg)
-            let builder = session.associatedWorkoutBuilder()
-            builder.dataSource = HKLiveWorkoutDataSource(
-                healthStore: healthStore, workoutConfiguration: cfg)
-            session.delegate = self
-            session.startActivity(with: Date())
-            builder.beginCollection(withStart: Date()) { [weak self] _, error in
-                if let error { self?.setStatus("builder: \(error.localizedDescription)") }
-            }
-            workoutSession = session
-            workoutBuilder = builder
-        } catch {
-            // Recording still works, but watchOS may suspend the app when the
-            // screen sleeps. Fix the HealthKit capability / permissions.
-            setStatus("keep-alive failed: \(error.localizedDescription)")
-        }
-    }
+    private func startWorkoutKeepAlive() {}
 
-    private func stopWorkoutKeepAlive() {
-        workoutSession?.end()
-        workoutBuilder?.endCollection(withEnd: Date()) { [weak self] _, _ in
-            // Discard so data-collection sessions don't clutter the Health app.
-            // Use finishWorkout(completion:) instead if you want ring credit.
-            self?.workoutBuilder?.discardWorkout()
-            self?.workoutSession = nil
-            self?.workoutBuilder = nil
-        }
-    }
+    private func stopWorkoutKeepAlive() {}
 
     // MARK: - helpers
 
     private func setStatus(_ s: String) {
         DispatchQueue.main.async { self.status = s }
+    }
+
+    /// Fire-and-forget live message to the iPhone (rep-tagger coordination).
+    /// Best-effort: if the phone app isn't open/reachable, recording continues
+    /// unaffected — that session just won't have per-rep tap labels.
+    private func sendPhone(_ msg: [String: Any]) {
+        guard WCSession.default.activationState == .activated,
+              WCSession.default.isReachable else { return }
+        WCSession.default.sendMessage(msg, replyHandler: nil, errorHandler: nil)
     }
 
     static func sanitize(_ s: String) -> String {
@@ -313,18 +636,6 @@ final class RecorderModel: NSObject, ObservableObject {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd-HHmmss"
         return f.string(from: Date())
-    }
-}
-
-// MARK: - HKWorkoutSessionDelegate
-
-extension RecorderModel: HKWorkoutSessionDelegate {
-    func workoutSession(_ workoutSession: HKWorkoutSession,
-                        didChangeTo toState: HKWorkoutSessionState,
-                        from fromState: HKWorkoutSessionState, date: Date) {}
-
-    func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
-        setStatus("workout error: \(error.localizedDescription)")
     }
 }
 
@@ -355,5 +666,212 @@ extension RecorderModel: WCSessionDelegate {
             setStatus("transfer failed — use Resend on home screen")
         }
         scanPending()
+    }
+}
+
+// MARK: - On-watch CoreML inference
+
+/// Loads the exported Core ML classifier and turns one IMU window into a label.
+///
+/// Loads the compiled model generically (by bundle resource + feature names from
+/// the model description) instead of the Xcode-generated `LiftLoggerClassifier`
+/// Swift class, so this file compiles and the manual recorder keeps working even
+/// before the .mlpackage has been dragged into the Watch target. `isReady` is
+/// false until the model is actually bundled.
+final class ExerciseClassifier {
+
+    private let model: MLModel?
+    private let labelName: String      // model description's predicted-class feature
+    private let probsName: String?     // …and its probability-dictionary feature
+    let isReady: Bool
+
+    init() {
+        if let url = Bundle.main.url(forResource: "LiftLoggerClassifier", withExtension: "mlmodelc"),
+           let m = try? MLModel(contentsOf: url) {
+            model = m
+            labelName = m.modelDescription.predictedFeatureName ?? "classLabel"
+            probsName = m.modelDescription.predictedProbabilitiesName
+            isReady = true
+        } else {
+            model = nil
+            labelName = "classLabel"
+            probsName = nil
+            isReady = false
+        }
+    }
+
+    /// window: `RecorderModel.windowSize` rows × `nChannels` cols of RAW IMU,
+    /// channel order matching the trainer's CHANNELS. Returns (top label, its prob).
+    func predict(window: [[Float]]) -> (label: String, confidence: Double)? {
+        let W = RecorderModel.windowSize
+        let C = RecorderModel.nChannels
+        guard let model, window.count == W, window.first?.count == C,
+              let arr = try? MLMultiArray(shape: [1, NSNumber(value: W), NSNumber(value: C)],
+                                          dataType: .float32) else { return nil }
+
+        // Contiguous [1, W, C] layout → linear index t*C + c (batch 0).
+        let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: W * C)
+        var i = 0
+        for t in 0..<W {
+            let row = window[t]
+            for c in 0..<C { ptr[i] = row[c]; i += 1 }
+        }
+
+        guard let provider = try? MLDictionaryFeatureProvider(
+                dictionary: ["imu_window": MLFeatureValue(multiArray: arr)]),
+              let out = try? model.prediction(from: provider) else { return nil }
+
+        let label = out.featureValue(for: labelName)?.stringValue ?? RecorderModel.restLabel
+        var confidence = 0.0
+        if let probsName, let probs = out.featureValue(for: probsName)?.dictionaryValue {
+            for (k, v) in probs where "\(k)" == label { confidence = v.doubleValue; break }
+        }
+        return (label, confidence)
+    }
+}
+
+// MARK: - On-watch rep counting
+
+/// Counts reps in one exercise bout by the same unsupervised periodicity method as
+/// training/reps.py: pick the most periodic channel, read its dominant repetition
+/// period, and estimate reps ≈ bout_length / period (cross-checked vs. peak counts).
+/// Keep the constants and logic in sync with reps.py.
+final class RepCounter {
+
+    private let periodMinS = 0.5
+    private let periodMaxS = 4.0
+    private let periodicityMin = 0.25
+    private let prominenceFrac = 0.30
+
+    /// samples: bout rows × `RecorderModel.nChannels` of raw IMU. Returns reps (>= 0).
+    func count(_ samples: [[Float]], fs: Int) -> Int {
+        let n = samples.count
+        guard n >= fs, let c = samples.first?.count, c > 0 else { return 0 }
+        let minLag = Int(periodMinS * Double(fs))
+        let maxLag = min(Int(periodMaxS * Double(fs)), n / 2)
+        guard maxLag > minLag else { return 0 }
+
+        // Column-major, mean-removed copy for fast per-channel autocorrelation.
+        var cols = [[Double]](repeating: [Double](repeating: 0, count: n), count: c)
+        for t in 0..<n {
+            let row = samples[t]
+            for ch in 0..<c { cols[ch][t] = Double(row[ch]) }
+        }
+
+        var bestScore = -1.0, bestLag = 0, bestCh = 0
+        for ch in 0..<c {
+            let mean = cols[ch].reduce(0, +) / Double(n)
+            for t in 0..<n { cols[ch][t] -= mean }
+            var energy = 0.0
+            for v in cols[ch] { energy += v * v }
+            if energy < 1e-8 { continue }
+            let (score, lag) = bestAutocorr(cols[ch], energy: energy, minLag: minLag, maxLag: maxLag)
+            if score > bestScore { bestScore = score; bestLag = lag; bestCh = ch }
+        }
+        guard bestLag > 0 else { return 0 }
+
+        let period = bestLag
+        let autocorrReps = Int((Double(n) / Double(period)).rounded())
+
+        let x = cols[bestCh]                          // already mean-removed
+        var variance = 0.0
+        for v in x { variance += v * v }
+        let std = (variance / Double(n)).squareRoot()
+        let peakReps = countPeaks(x, minDistance: Int((0.6 * Double(period)).rounded()),
+                                  prominence: prominenceFrac * std)
+
+        if bestScore < periodicityMin { return max(peakReps, 0) }
+        if peakReps > 0 && abs(peakReps - autocorrReps) <= 1 { return peakReps }
+        return max(autocorrReps, 0)
+    }
+
+    private func bestAutocorr(_ x: [Double], energy: Double, minLag: Int, maxLag: Int) -> (Double, Int) {
+        var bestScore = -1.0, bestLag = 0
+        let n = x.count
+        for lag in minLag...maxLag {
+            var dot = 0.0
+            var t = 0
+            while t < n - lag { dot += x[t] * x[t + lag]; t += 1 }
+            let ac = dot / energy
+            if ac > bestScore { bestScore = ac; bestLag = lag }
+        }
+        return (bestScore, bestLag)
+    }
+
+    private func countPeaks(_ x: [Double], minDistance: Int, prominence: Double) -> Int {
+        let md = max(minDistance, 1)
+        var count = 0
+        var last = -md
+        var i = 1
+        while i < x.count - 1 {
+            if x[i] > x[i - 1] && x[i] >= x[i + 1] && x[i] >= prominence && i - last >= md {
+                count += 1
+                last = i
+            }
+            i += 1
+        }
+        return count
+    }
+}
+
+// MARK: - On-watch supervised rep counting (Core ML density model)
+
+/// Loads the exported rep-density model (LiftLoggerRepCounter.mlpackage) and counts
+/// reps in one bout by resampling it to `RecorderModel.repBoutLen` frames, running
+/// the model, and summing the predicted per-frame density — the deployment of
+/// train_reps_model.py. `count` returns nil when the model isn't bundled yet, so the
+/// caller transparently falls back to the unsupervised `RepCounter`.
+final class RepDensityCounter {
+
+    private let model: MLModel?
+    private let outName: String        // model description's density output feature
+    let isReady: Bool
+
+    init() {
+        if let url = Bundle.main.url(forResource: "LiftLoggerRepCounter", withExtension: "mlmodelc"),
+           let m = try? MLModel(contentsOf: url) {
+            model = m
+            outName = m.modelDescription.outputDescriptionsByName.keys.first ?? "var_0"
+            isReady = true
+        } else {
+            model = nil
+            outName = ""
+            isReady = false
+        }
+    }
+
+    /// samples: bout rows × `RecorderModel.nChannels` of raw IMU. Returns a rep
+    /// count, or nil if the model isn't available (caller should fall back).
+    func count(_ samples: [[Float]], fs: Int) -> Int? {
+        guard isReady, let model else { return nil }
+        let L = RecorderModel.repBoutLen
+        let C = RecorderModel.nChannels
+        let n = samples.count
+        guard n >= 2, samples.first?.count == C,
+              let arr = try? MLMultiArray(shape: [1, NSNumber(value: L), NSNumber(value: C)],
+                                          dataType: .float32) else { return nil }
+
+        // Linear-resample the bout to L frames (watch samples are ~uniform at fs),
+        // matching rep_events._resample. Contiguous [1, L, C] layout -> index i*C + c.
+        let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: L * C)
+        for i in 0..<L {
+            let pos = Double(i) * Double(n - 1) / Double(L - 1)
+            let lo = Int(pos)
+            let hi = min(lo + 1, n - 1)
+            let f = Float(pos - Double(lo))
+            let a = samples[lo], b = samples[hi]
+            let base = i * C
+            for c in 0..<C { ptr[base + c] = a[c] * (1 - f) + b[c] * f }
+        }
+
+        guard let provider = try? MLDictionaryFeatureProvider(
+                dictionary: ["imu_bout": MLFeatureValue(multiArray: arr)]),
+              let out = try? model.prediction(from: provider),
+              let dens = out.featureValue(for: outName)?.multiArrayValue else { return nil }
+
+        // Rep count = integral of the predicted density (sum over frames).
+        var sum: Double = 0
+        for k in 0..<dens.count { sum += dens[k].doubleValue }
+        return max(Int(sum.rounded()), 0)
     }
 }

@@ -28,7 +28,10 @@ struct WatchRootView: View {
         switch model.phase {
         case .idle: idleView
         case .resting: restingView
+        case .countdown: countdownView
         case .inSet: inSetView
+        case .enteringReps: repsEntryView
+        case .autoDetecting: autoDetectingView
         }
     }
 
@@ -47,6 +50,13 @@ struct WatchRootView: View {
                     Text("Start Session").bold()
                 }
                 .tint(.green)
+
+                Button {
+                    model.startAutoSession()
+                } label: {
+                    Text("Auto-Detect (AI)").bold()
+                }
+                .tint(.blue)
 
                 if !model.pendingFiles.isEmpty {
                     Button {
@@ -79,6 +89,17 @@ struct WatchRootView: View {
                     }
                 }
             }
+            if model.canDiscardLast {
+                Section {
+                    Button(role: .destructive) {
+                        model.discardLastSet()
+                    } label: {
+                        Label("Discard last set", systemImage: "trash")
+                    }
+                } footer: {
+                    Text("Mark the set you just finished as bad — it won't be used for training.")
+                }
+            }
             Section {
                 LabeledContent("Sets", value: "\(model.setCount)")
                 LabeledContent("Samples", value: "\(model.sampleCount)")
@@ -89,6 +110,109 @@ struct WatchRootView: View {
                 }
             }
         }
+    }
+
+    // MARK: - countdown (get into position before the set window opens)
+
+    private var countdownView: some View {
+        VStack(spacing: 8) {
+            Text(model.currentExercise.replacingOccurrences(of: "_", with: " "))
+                .font(.headline)
+                .multilineTextAlignment(.center)
+
+            Text("\(model.countdownRemaining)")
+                .font(.system(size: 60, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+
+            Text("Get into position")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button(role: .cancel) {
+                model.cancelCountdown()
+            } label: {
+                Text("Cancel")
+            }
+        }
+        .padding()
+    }
+
+    // MARK: - rep entry (after End Set, before logging the set)
+
+    private var repsEntryView: some View {
+        VStack(spacing: 6) {
+            Text(model.currentExercise.replacingOccurrences(of: "_", with: " "))
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.7)
+                .lineLimit(2)
+            Text("Reps")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                Button { model.decrementReps() } label: {
+                    Image(systemName: "minus.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .font(.title2)
+
+                Text("\(model.repsEntry)")
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .frame(minWidth: 56)
+                    .contentTransition(.numericText())
+
+                Button { model.incrementReps() } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .font(.title2)
+            }
+            Button {
+                model.confirmReps()
+            } label: {
+                Text("Save Set").bold()
+            }
+            .tint(.green)
+        }
+        .padding()
+    }
+
+    // MARK: - auto-detect (AI labels the set live; no exercise buttons)
+
+    private var autoDetectingView: some View {
+        let resting = model.liveExercise == RecorderModel.restLabel || model.liveExercise == "—"
+        return VStack(spacing: 8) {
+            Text("Auto-Detect")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text(model.liveExercise.replacingOccurrences(of: "_", with: " "))
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(resting ? Color.secondary : Color.green)
+                .minimumScaleFactor(0.7)
+                .lineLimit(2)
+
+            Text(String(format: "%.0f%%", model.liveConfidence * 100))
+                .font(.system(.title3, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(resting ? .secondary : .primary)
+
+            LabeledContent("Logged", value: "\(model.detectedCount)")
+                .font(.footnote)
+            LabeledContent("Last reps", value: "\(model.lastDetectedReps)")
+                .font(.footnote)
+
+            Button(role: .destructive) {
+                model.endSession()
+            } label: {
+                Text("End Session")
+            }
+            .tint(.red)
+        }
+        .padding()
     }
 
     // MARK: - in set
