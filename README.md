@@ -1,6 +1,6 @@
 # Watch Workout Tracker
 
-An Apple Watch app that automatically detects and logs your exercises during a workout — no manual entry required.
+An Apple Watch app that automatically detects and logs your exercises during a workout — no manual entry required. Claude Code was used for this project. 
 
 ## How it works
 
