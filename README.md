@@ -4,7 +4,7 @@ An Apple Watch app that automatically detects which gym exercise you're doing an
 
 ## How it works
 
-The watch samples wrist motion (accelerometer + gyroscope, fused via CoreMotion) at 50 Hz and runs two small convolutional neural networks **on-device** via CoreML / the Neural Engine — no network round-trip, no phone needed mid-set:
+The watch samples wrist motion (accelerometer + gyroscope, fused via CoreMotion) at 50 Hz and runs two small convolutional neural networks **on-device** via CoreML / the Neural Engine:
 
 1. **Exercise classifier** (`CNN1D`) — looks at a rolling 2-second window (100 samples × 6 channels: `acc_x/y/z`, `gyro_x/y/z`) and predicts which of 16 trained exercises (or "rest") is currently happening. Runs ~2x/second; a prediction only commits once it's been confident and stable for a couple of consecutive windows, so brief glitches don't log a phantom set.
 2. **Rep counter** (`RepDensityCNN`) — once a set is detected, its full IMU bout is resampled to a fixed length and fed through a dilated 1-D convnet that outputs a rep-density curve (one bump per rep) rather than a single number; the rep count is the curve's integral. This is more accurate than naive peak-counting, especially for wrist-quiet exercises.
