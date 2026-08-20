@@ -6,6 +6,9 @@ ExportWrapper is what we ship to CoreML: it accepts the natural on-watch layout
 statistics, and emits class probabilities — so the Swift side just hands over the
 sensor buffer and reads a label.
 """
+# Keeps `X | None` annotations lazy so this runs on the 3.9 venv.
+from __future__ import annotations
+
 import math
 
 import torch

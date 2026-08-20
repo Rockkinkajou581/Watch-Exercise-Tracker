@@ -235,8 +235,10 @@ struct SessionRow: View {
             ?? DS.textTertiary
     }
 
+    /// One chip per group so the count in the metric line reconciles with what
+    /// is shown. An unconfirmed group has no name to print, so it chips as "?".
     private var chips: [String] {
-        summary.groups.filter(\.isConfirmed).map(\.displayName)
+        summary.groups.map { $0.isConfirmed ? $0.displayName : "?" }
     }
 
     var body: some View {

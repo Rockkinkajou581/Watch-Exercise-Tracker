@@ -149,8 +149,10 @@ struct ProgressModule: View {
                 // §4 — padded to the data range, never zero-anchored: a 17→24
                 // climb has to be visible, and a zero floor flattens it.
                 .chartYScale(domain: yDomain)
-                .chartPlotStyle { $0.padding(.top, 14).padding(.bottom, 8) }
                 .frame(height: 96)
+                // The area fill draws to the domain floor, which sits below the
+                // plot frame — without this it bleeds past the card's corners.
+                .clipped()
 
                 HStack(spacing: 0) {
                     ForEach(series) { p in
@@ -164,12 +166,14 @@ struct ProgressModule: View {
         }
     }
 
+    /// §4 — padded to the data range, never zero-anchored: a 17→24 climb has to
+    /// be visible, and a zero floor flattens it. A little headroom above the max
+    /// keeps the newest point's marker from clipping at the top edge.
     private var yDomain: ClosedRange<Double> {
         let values = series.map { Double($0.reps) }
         let lo = values.min() ?? 0
         let hi = values.max() ?? 1
         let pad = max(1, ((hi - lo) * 0.35).rounded())
-        let floor = lo - pad
-        return floor...(hi == floor ? hi + 1 : hi)
+        return (lo - pad)...(hi + max(1, pad * 0.4))
     }
 }
