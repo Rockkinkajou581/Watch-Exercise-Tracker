@@ -96,10 +96,20 @@ def main():
     def loader(idx, shuffle):
         x = torch.tensor((ds.X[idx] - mean) / std).transpose(1, 2)   # (N, C, L)
         y = torch.tensor(ds.Y[idx])                                  # (N, L)
-        return DataLoader(TensorDataset(x, y), batch_size=config.BATCH_SIZE,
-                          shuffle=shuffle, drop_last=shuffle)
+        # drop_last guards BatchNorm against a trailing batch of 1, but a bout is a
+        # whole SET (not a sliding window as in train.py), so there are dozens here
+        # where the classifier has thousands. Dropping the only partial batch would
+        # leave an empty loader and train nothing at all — hence the size check.
+        return DataLoader(TensorDataset(x, y), batch_size=config.REP_BATCH_SIZE,
+                          shuffle=shuffle,
+                          drop_last=shuffle and len(idx) > config.REP_BATCH_SIZE)
 
     train_loader, val_loader = loader(tr, True), loader(va, False)
+    if len(train_loader) == 0:
+        raise SystemExit(
+            f"\nTrain loader is empty ({len(tr)} bouts, batch size {config.REP_BATCH_SIZE}) — "
+            "training would silently do nothing. Lower REP_BATCH_SIZE in config.py.")
+    print(f"train batches/epoch: {len(train_loader)}")
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     model = RepDensityCNN().to(device)
@@ -107,7 +117,7 @@ def main():
     opt = torch.optim.Adam(model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY)
 
     best_mae, best_state, patience = float("inf"), None, 0
-    for epoch in range(config.EPOCHS):
+    for epoch in range(config.REP_EPOCHS):
         model.train()
         for xb, yb in train_loader:
             xb, yb = xb.to(device), yb.to(device)
@@ -123,8 +133,8 @@ def main():
         else:
             patience += 1
         print(f"epoch {epoch:3d}   val count-MAE {val_mae:.3f}   best {best_mae:.3f}")
-        if patience >= config.EARLY_STOP_PATIENCE:
-            print(f"early stop (no val improvement for {config.EARLY_STOP_PATIENCE} epochs)")
+        if patience >= config.REP_EARLY_STOP_PATIENCE:
+            print(f"early stop (no val improvement for {config.REP_EARLY_STOP_PATIENCE} epochs)")
             break
 
     model.load_state_dict(best_state)

@@ -62,7 +62,9 @@ final class RecorderModel: NSObject, ObservableObject {
 
     /// Seconds counted down (3-2-1) after tapping an exercise, before the set
     /// window actually starts — gives you time to get into position so the
-    /// front of every set is clean (the training trim no longer cuts the front).
+    /// front of every set is clean. start_ms is stamped raw here; the training
+    /// pipeline shaves a little more off each end when it draws labels (see
+    /// TRIM_START_SEC / TRIM_END_SEC in training/config.py).
     static let countdownSeconds = 3
 
     // MARK: - UI state (mutate on main thread only)

@@ -30,12 +30,12 @@ DISCARD_LABEL = "discard"  # a set the user marked bad on the watch; windows tou
 # ----- set-boundary trim -----
 # Shrink each labeled set interval before labeling, so button-press slop isn't
 # learned as the exercise:
-#   * front  = 0.0 because the watch now runs a 3-2-1 countdown before opening the
-#     set window, so you're already in position when start_ms is stamped.
+#   * front  > 0 absorbs the last moment of getting set after the watch's 3-2-1
+#     countdown stamps start_ms, so settling motion isn't learned as the exercise.
 #   * end    > 0 trims the wind-down between finishing the movement and tapping
 #     "End Set".
 # Set either to 0.0 to disable that side.
-TRIM_START_SEC = 0.0
+TRIM_START_SEC = 0.5
 TRIM_END_SEC = 1.0
 
 # ----- rep counting -----
@@ -59,6 +59,14 @@ REP_MIN_PROMINENCE_FRAC = 0.30     # a peak must rise this × signal-std to be a
 REP_BOUT_LEN = 256                 # frames each set's IMU is resampled to for the model
 REP_DENSITY_SIGMA = 4.0            # Gaussian label half-width, in resampled frames, per rep
 REP_MIN_TAGGED = 1                 # ignore sets with fewer tagged reps than this
+
+# A training example here is a whole SET, not a 2 s sliding window, so this dataset
+# is ~50 bouts where the classifier has ~2500 windows. The shared BATCH_SIZE/EPOCHS
+# below are sized for windows: reused here they give ~1 gradient step per epoch and
+# the model never leaves its initialization. These are the bout-scale equivalents.
+REP_BATCH_SIZE = 8
+REP_EPOCHS = 400
+REP_EARLY_STOP_PATIENCE = 40
 
 # ----- training -----
 SEED = 1337
