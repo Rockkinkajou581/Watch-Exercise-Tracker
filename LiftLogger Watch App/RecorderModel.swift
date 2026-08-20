@@ -42,17 +42,32 @@ final class RecorderModel: NSObject, ObservableObject {
     static let nChannels = 6
     /// Sample rate. MUST match config.FS and motion.deviceMotionUpdateInterval.
     static let fs = 50
-    /// Frames a bout is resampled to for the supervised rep-density model.
+    /// Frames a bout is resampled to by the legacy whole-bout rep model.
     /// MUST match config.REP_BOUT_LEN.
     static let repBoutLen = 256
+    /// Hop between rep-density windows when the bundled model is the windowed one.
+    /// MUST match config.REP_WIN_STRIDE (1 s at 50 Hz). The window LENGTH isn't a
+    /// constant here — it's read off the compiled model, so retraining with a
+    /// different REP_WINDOW needs no Swift change.
+    static let repWinStride = 50
     /// Default rep count pre-filled on the End Set screen (manual sessions).
     static let defaultReps = 8
     /// Run a prediction every this many new samples (~2x/sec at 50 Hz).
     private let inferenceStride = 25
     /// Below this top-class probability, a window is treated as rest (don't log guesses).
     private let liveConfidenceThreshold = 0.6
-    /// Consecutive agreeing predictions before we commit a start/stop transition (debounce).
-    private let commitWindows = 2
+    /// Consecutive agreeing predictions before we OPEN a set (debounce).
+    private let startWindows = 3
+    /// Consecutive agreeing predictions before we act on a change while a set is
+    /// already open. Higher than `startWindows`: it should be harder to leave an
+    /// exercise than to enter one, so a couple of ambiguous windows can't end a set.
+    private let stopWindows = 5
+    /// Mid-set pauses (a hold at the top, a breath at the bottom, resetting grip)
+    /// look like rest to a 2 s window. After rest goes stable we keep the set open
+    /// this long; if the same exercise comes back before the grace expires the set
+    /// simply continues instead of being split into fragments. Raise this if long
+    /// pauses still split a set; lower it if back-to-back sets get merged into one.
+    private let restGraceMS = 5000.0
     /// Detected sets shorter than this are treated as noise and not logged.
     private let minDetectedMS = 1500.0
     /// Samples of lead-in kept before a bout commits, so its first reps aren't missed.
@@ -78,6 +93,7 @@ final class RecorderModel: NSObject, ObservableObject {
     @Published var setCount: Int = 0
     @Published var canDiscardLast: Bool = false   // true after a set, until discarded/new set
     @Published var repsEntry: Int = RecorderModel.defaultReps   // editable on the End Set screen
+    @Published var repsFromPhone = false        // true when repsEntry came from the phone tagger
     @Published var status: String = "ready"
     @Published var pendingFiles: [URL] = []   // recorded but not yet transferred
 
@@ -91,11 +107,9 @@ final class RecorderModel: NSObject, ObservableObject {
     /// Do NOT name one "rest" or "discard" — the transform script reserves those
     /// labels (rest = outside any set; discard = a set marked bad).
     let exercises = [
-        "incline_chest_press", "flat_chest_press", "machine_shoulder_press",
-        "cable_side_delt", "cable_front_delt", "seated_tricep_dips",
-        "overhead_triceps", "cable_push_down", "machine_row_wide",
-        "machine_pull_down", "cable_curl", "dumbbell_hammer_curl",
-        "machine_arm_curl", "wrist_extensions", "forearm_curl", "forearm_raises",
+        "incline_chest_press", "machine_shoulder_press", "machine_row_wide",
+        "cable_push_down", "overhead_triceps", "dumbbell_hammer_curl",
+        "forearm_raises",
     ]
 
     // MARK: - private
@@ -122,6 +136,7 @@ final class RecorderModel: NSObject, ObservableObject {
     private var lastSetStartMS: Double?     // boundaries of the most recent completed set,
     private var lastSetEndMS: Double?       // so it can be discarded after the fact
     private var pendingSetEndMS: Double = 0 // end of the set awaiting rep entry
+    private var repsEntryEdited = false     // user turned the dial; don't overwrite their number
 
     // MARK: - live auto-detect state (touched on workQueue, except @Published mirrors)
     private let classifier = ExerciseClassifier()
@@ -134,6 +149,8 @@ final class RecorderModel: NSObject, ObservableObject {
     private var samplesSinceInference = 0
     private var candidateLabel = RecorderModel.restLabel   // debounced label being voted on
     private var candidateStreak = 0
+    private var pendingEndMS: Double?       // rest went stable here; set closes if it holds
+    private var pendingEndSamples: Int?     // bout length at that moment, for trimming the tail
     private var activeLabel: String?        // exercise of the set currently being logged, if any
     private var activeStartMS: Double = 0
     private var activeConfSum: Double = 0   // running confidence sum over the active set
@@ -245,6 +262,8 @@ final class RecorderModel: NSObject, ObservableObject {
         samplesSinceInference = 0
         candidateLabel = Self.restLabel
         candidateStreak = 0
+        pendingEndMS = nil
+        pendingEndSamples = nil
         activeLabel = nil
         activeStartMS = 0
         activeConfSum = 0
@@ -266,7 +285,10 @@ final class RecorderModel: NSObject, ObservableObject {
         if boutBuffer != nil {
             boutBuffer!.append(sample)
             if boutBuffer!.count > maxBoutSamples {
-                boutBuffer!.removeFirst(boutBuffer!.count - maxBoutSamples)
+                let dropped = boutBuffer!.count - maxBoutSamples
+                boutBuffer!.removeFirst(dropped)
+                // pendingEndSamples indexes into this buffer — slide it too.
+                if let n = pendingEndSamples { pendingEndSamples = max(0, n - dropped) }
             }
         }
         DispatchQueue.main.async { self.sampleCount += 1 }
@@ -279,7 +301,12 @@ final class RecorderModel: NSObject, ObservableObject {
     }
 
     /// workQueue only. Debounced segmentation: a stable non-rest class opens a
-    /// "set"; returning to rest (or switching exercise) closes and logs it.
+    /// "set"; sustained rest (or switching exercise) closes and logs it.
+    ///
+    /// Rest doesn't end a set the moment it commits. It only arms `pendingEndMS`;
+    /// the set is written when rest has held for `restGraceMS`. If the same
+    /// exercise returns first the set continues uninterrupted — that's what keeps
+    /// a pause at the top or bottom of a rep from splitting one set into five.
     private func handlePrediction(rawLabel: String, confidence: Double, atMS tms: Double) {
         DispatchQueue.main.async {
             self.liveExercise = rawLabel
@@ -294,16 +321,47 @@ final class RecorderModel: NSObject, ObservableObject {
             candidateLabel = label
             candidateStreak = 1
         }
-        guard candidateStreak >= commitWindows else { return }   // not stable yet
+
+        // A set whose grace period has run out closes now, at the moment rest began.
+        if let armed = pendingEndMS, tms - armed >= restGraceMS {
+            closeActiveSet(endMS: armed)
+        }
+
+        // Leaving an open set takes more agreement than opening or resuming one:
+        // coming back from a pause should be easy, ending a set should be hard.
+        let needed: Int
+        if activeLabel == nil {
+            needed = startWindows                    // opening a new set
+        } else if candidateLabel == activeLabel {
+            needed = startWindows                    // the set is still going
+        } else {
+            needed = stopWindows                     // ending it, or switching exercise
+        }
+        guard candidateStreak >= needed else { return }   // not stable yet
 
         let current = activeLabel ?? Self.restLabel
         if candidateLabel == current {
-            if activeLabel != nil { activeConfSum += confidence; activeConfN += 1 }
+            if activeLabel != nil {
+                pendingEndMS = nil      // exercise is back — this set was never over
+                pendingEndSamples = nil
+                activeConfSum += confidence
+                activeConfN += 1
+            }
             return
         }
 
-        // Stable transition: close whatever was open, then open a new set if non-rest.
-        closeActiveSet(endMS: tms)
+        // Stable rest during a set: arm the grace timer and keep buffering samples,
+        // so if this is just a pause the reps on either side stay in one bout.
+        if activeLabel != nil && candidateLabel == Self.restLabel {
+            if pendingEndMS == nil {
+                pendingEndMS = tms
+                pendingEndSamples = boutBuffer?.count   // don't count reps in the pause tail
+            }
+            return
+        }
+
+        // A different exercise, or rest that already timed out: real transition.
+        closeActiveSet(endMS: pendingEndMS ?? tms)
         if candidateLabel != Self.restLabel {
             activeLabel = candidateLabel
             activeStartMS = tms
@@ -316,10 +374,16 @@ final class RecorderModel: NSObject, ObservableObject {
 
     /// workQueue only. Write the active detected set (if long enough) and clear it.
     private func closeActiveSet(endMS: Double) {
+        let trimTo = pendingEndSamples
+        pendingEndMS = nil
+        pendingEndSamples = nil
         guard let label = activeLabel else { return }
         activeLabel = nil
-        let samples = boutBuffer ?? []
+        var samples = boutBuffer ?? []
         boutBuffer = nil
+        // Drop the trailing rest we buffered while waiting out the grace period —
+        // endMS stops at the pause, so the rep model shouldn't see past it either.
+        if let n = trimTo, n < samples.count { samples.removeLast(samples.count - n) }
         guard endMS - activeStartMS >= minDetectedMS else { return }   // blip — ignore
         // Prefer the trained density model; fall back to unsupervised if it isn't bundled.
         let reps = repModel.count(samples, fs: Self.fs) ?? repCounter.count(samples, fs: Self.fs)
@@ -353,7 +417,8 @@ final class RecorderModel: NSObject, ObservableObject {
         workQueue.addOperation { [weak self] in
             guard let self else { return }
             // Close any set still open at the moment End Session was tapped.
-            self.closeActiveSet(endMS: ProcessInfo.processInfo.systemUptime * 1000.0)
+            self.closeActiveSet(
+                endMS: self.pendingEndMS ?? ProcessInfo.processInfo.systemUptime * 1000.0)
             try? self.detectedHandle?.close()
             self.detectedHandle = nil
             if let d = self.detectedURL {
@@ -414,17 +479,46 @@ final class RecorderModel: NSObject, ObservableObject {
     }
 
     /// End the set's recording window, then ask for the rep count before logging it.
+    ///
+    /// If someone is tagging reps on the phone they already counted this set, so
+    /// `set_end` asks for that tally and pre-fills the entry with it — one tap on
+    /// Save Set and you're done. The phone's answer arrives asynchronously; until
+    /// it does (or if nobody is tagging) the screen shows `defaultReps` as before.
     func endSet() {
         guard phase == .inSet else { return }
         pendingSetEndMS = ProcessInfo.processInfo.systemUptime * 1000.0
-        sendPhone(["type": "set_end", "endMs": pendingSetEndMS])   // disarm phone tagger
         repsEntry = Self.defaultReps
+        repsFromPhone = false
+        repsEntryEdited = false
         phase = .enteringReps
         WKInterfaceDevice.current().play(.stop)
+        // Disarms the phone tagger and replies with its tap count for this set.
+        sendPhone(["type": "set_end", "endMs": pendingSetEndMS]) { [weak self] reply in
+            guard let self else { return }
+            let taps = (reply["repTaps"] as? Int) ?? 0
+            let tagging = (reply["tagging"] as? Bool) ?? false
+            guard tagging, taps > 0 else { return }   // nobody counted — keep the default
+            DispatchQueue.main.async {
+                // A late reply must not clobber a number the user already dialed,
+                // or land on the next set after this one was saved.
+                guard self.phase == .enteringReps, !self.repsEntryEdited else { return }
+                self.repsEntry = min(taps, 99)
+                self.repsFromPhone = true
+            }
+        }
     }
 
-    func incrementReps() { repsEntry = min(repsEntry + 1, 99) }
-    func decrementReps() { repsEntry = max(repsEntry - 1, 0) }
+    func incrementReps() {
+        repsEntry = min(repsEntry + 1, 99)
+        repsEntryEdited = true
+        repsFromPhone = false
+    }
+
+    func decrementReps() {
+        repsEntry = max(repsEntry - 1, 0)
+        repsEntryEdited = true
+        repsFromPhone = false
+    }
 
     /// Confirm the rep count from the End Set screen and write the set.
     func confirmReps() {
@@ -622,10 +716,11 @@ final class RecorderModel: NSObject, ObservableObject {
     /// Fire-and-forget live message to the iPhone (rep-tagger coordination).
     /// Best-effort: if the phone app isn't open/reachable, recording continues
     /// unaffected — that session just won't have per-rep tap labels.
-    private func sendPhone(_ msg: [String: Any]) {
+    private func sendPhone(_ msg: [String: Any],
+                           reply: (([String: Any]) -> Void)? = nil) {
         guard WCSession.default.activationState == .activated,
               WCSession.default.isReachable else { return }
-        WCSession.default.sendMessage(msg, replyHandler: nil, errorHandler: nil)
+        WCSession.default.sendMessage(msg, replyHandler: reply, errorHandler: nil)
     }
 
     static func sanitize(_ s: String) -> String {
@@ -826,54 +921,120 @@ final class RepCounter {
 final class RepDensityCounter {
 
     private let model: MLModel?
+    private let inName: String         // model description's IMU input feature
     private let outName: String        // model description's density output feature
+    private let frames: Int            // time steps the model expects per call
+    private let windowed: Bool         // slide fixed-second windows vs. resample the bout
     let isReady: Bool
 
+    /// Both rep models are the same network with the same output; they differ in
+    /// what one call covers. The compiled model says which is bundled — a
+    /// "imu_window" input means fixed-SECOND windows to slide over the bout
+    /// (train_reps_windows.py), anything else means the whole set resampled to a
+    /// fixed frame count (train_reps_model.py). Reading the length from the model
+    /// too means retraining at a different window size needs no change here.
     init() {
-        if let url = Bundle.main.url(forResource: "LiftLoggerRepCounter", withExtension: "mlmodelc"),
-           let m = try? MLModel(contentsOf: url) {
-            model = m
-            outName = m.modelDescription.outputDescriptionsByName.keys.first ?? "var_0"
-            isReady = true
-        } else {
+        guard let url = Bundle.main.url(forResource: "LiftLoggerRepCounter",
+                                        withExtension: "mlmodelc"),
+              let m = try? MLModel(contentsOf: url) else {
             model = nil
-            outName = ""
+            inName = ""; outName = ""
+            frames = 0; windowed = false
             isReady = false
+            return
         }
+        let desc = m.modelDescription
+        let input = desc.inputDescriptionsByName.first { $0.value.multiArrayConstraint != nil }
+        let shape = input?.value.multiArrayConstraint?.shape ?? []
+        model = m
+        inName = input?.key ?? "imu_bout"
+        outName = desc.outputDescriptionsByName.keys.first ?? "var_0"
+        // Shape is [1, L, C]; fall back to the legacy length if it's unreadable.
+        frames = shape.count >= 2 ? shape[shape.count - 2].intValue : RecorderModel.repBoutLen
+        windowed = (input?.key == "imu_window")
+        isReady = frames > 1
     }
 
     /// samples: bout rows × `RecorderModel.nChannels` of raw IMU. Returns a rep
     /// count, or nil if the model isn't available (caller should fall back).
     func count(_ samples: [[Float]], fs: Int) -> Int? {
         guard isReady, let model else { return nil }
-        let L = RecorderModel.repBoutLen
-        let C = RecorderModel.nChannels
-        let n = samples.count
-        guard n >= 2, samples.first?.count == C,
-              let arr = try? MLMultiArray(shape: [1, NSNumber(value: L), NSNumber(value: C)],
-                                          dataType: .float32) else { return nil }
+        guard samples.count >= 2, samples.first?.count == RecorderModel.nChannels else {
+            return nil
+        }
+        let density = windowed ? slidingDensity(samples, model: model)
+                               : resampledDensity(samples, model: model)
+        guard let density else { return nil }
+        return max(Int(density.reduce(0, +).rounded()), 0)   // reps = integral
+    }
 
-        // Linear-resample the bout to L frames (watch samples are ~uniform at fs),
-        // matching rep_events._resample. Contiguous [1, L, C] layout -> index i*C + c.
-        let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: L * C)
-        for i in 0..<L {
-            let pos = Double(i) * Double(n - 1) / Double(L - 1)
+    /// Windowed model: run every `repWinStride` samples and overlap-add the
+    /// predictions back onto the bout's own timeline. Overlapping windows are
+    /// AVERAGED (divided by how many covered each frame), not summed — otherwise
+    /// a rep in an overlap region would be counted once per window over it.
+    /// Mirrors rep_windows.bout_density, so the watch and the metrics agree.
+    private func slidingDensity(_ samples: [[Float]], model: MLModel) -> [Double]? {
+        let n = samples.count
+        let w = frames
+        var starts: [Int] = []
+        if n <= w {
+            starts = [0]
+        } else {
+            var st = 0
+            while st + w <= n { starts.append(st); st += RecorderModel.repWinStride }
+            if starts.last != n - w { starts.append(n - w) }   // don't drop the tail
+        }
+
+        var acc = [Double](repeating: 0, count: n)
+        var cov = [Double](repeating: 0, count: n)
+        for st in starts {
+            guard let dens = predict(model: model, frameCount: w, fill: { i in
+                // Edge-pad past the end: acc_* includes gravity, so repeating the
+                // last sample reads as "held still" where a zero row is impossible.
+                samples[min(st + i, n - 1)]
+            }) else { return nil }
+            let end = min(st + w, n)
+            for i in 0..<(end - st) {
+                acc[st + i] += dens[i]
+                cov[st + i] += 1
+            }
+        }
+        return (0..<n).map { acc[$0] / max(cov[$0], 1) }
+    }
+
+    /// Legacy whole-bout model: linear-resample the set onto `frames` steps and
+    /// run once. Matches rep_events._resample.
+    private func resampledDensity(_ samples: [[Float]], model: MLModel) -> [Double]? {
+        let n = samples.count
+        let l = frames
+        return predict(model: model, frameCount: l) { i in
+            let pos = Double(i) * Double(n - 1) / Double(l - 1)
             let lo = Int(pos)
             let hi = min(lo + 1, n - 1)
             let f = Float(pos - Double(lo))
             let a = samples[lo], b = samples[hi]
-            let base = i * C
-            for c in 0..<C { ptr[base + c] = a[c] * (1 - f) + b[c] * f }
+            return (0..<RecorderModel.nChannels).map { a[$0] * (1 - f) + b[$0] * f }
         }
+    }
 
+    /// One forward pass. `fill(i)` supplies row i of the model's input buffer.
+    private func predict(model: MLModel, frameCount: Int,
+                         fill: (Int) -> [Float]) -> [Double]? {
+        let c = RecorderModel.nChannels
+        guard let arr = try? MLMultiArray(
+                shape: [1, NSNumber(value: frameCount), NSNumber(value: c)],
+                dataType: .float32) else { return nil }
+        // Contiguous [1, L, C] layout -> index i*C + channel.
+        let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: frameCount * c)
+        for i in 0..<frameCount {
+            let row = fill(i)
+            let base = i * c
+            for ch in 0..<c { ptr[base + ch] = row[ch] }
+        }
         guard let provider = try? MLDictionaryFeatureProvider(
-                dictionary: ["imu_bout": MLFeatureValue(multiArray: arr)]),
+                dictionary: [inName: MLFeatureValue(multiArray: arr)]),
               let out = try? model.prediction(from: provider),
               let dens = out.featureValue(for: outName)?.multiArrayValue else { return nil }
-
-        // Rep count = integral of the predicted density (sum over frames).
-        var sum: Double = 0
-        for k in 0..<dens.count { sum += dens[k].doubleValue }
-        return max(Int(sum.rounded()), 0)
+        return (0..<dens.count).map { dens[$0].doubleValue }
     }
 }

@@ -6,6 +6,8 @@ ExportWrapper is what we ship to CoreML: it accepts the natural on-watch layout
 statistics, and emits class probabilities — so the Swift side just hands over the
 sensor buffer and reads a label.
 """
+import math
+
 import torch
 import torch.nn as nn
 
@@ -66,20 +68,38 @@ class RepDensityCNN(nn.Module):
     """Per-rep density regressor. Input (B, C, L) -> density (B, L), >= 0.
 
     Unlike CNN1D this keeps full temporal resolution (no pooling away of time):
-    a stack of dilated convolutions grows the receptive field to span a few reps
-    while the output stays length-L, so the net emits one bump per rep. Softplus
-    keeps the density non-negative; the rep count is its integral (sum over time).
+    a stack of dilated convolutions grows the receptive field while the output
+    stays length-L, so the net emits one bump per rep. Softplus keeps the density
+    non-negative; the rep count is its integral (sum over time).
+
+    The receptive field must span at least one rep, and the right stack depends on
+    what a frame MEANS. Kernel 7 stem + kernel-3 dilated blocks gives
+    RF = 7 + 2*sum(dilations):
+        bout path   (rep_events.py): a frame is 1/256th of the set, whatever its
+            real duration, so the default (1,2,4,8) -> 37 frames is ~14% of any
+            set — a rep or so of context by construction.
+        window path (rep_windows.py): a frame is a real 1/50 s, so 37 frames is
+            0.74 s — less than ONE rep of a slow exercise (REP_PERIOD_RANGE_S goes
+            to 4 s). Hence config.REP_WIN_DILATIONS, which reaches ~5 s.
+
+    `head_bias_init` sets the output bias so the net STARTS near the mean density
+    instead of at softplus(0) ~= 0.69 per frame. That matters more than it sounds:
+    a real density averages reps/frames (~0.01 on 8 s windows), so an untuned head
+    begins ~70x too high and burns its whole epoch budget just walking the output
+    down — training looks like it's converging when it is only deflating. Pass
+    inverse_softplus(mean target) from the training data; see train_reps_windows.
     """
-    def __init__(self, n_channels: int = config.N_CHANNELS, dropout: float = config.DROPOUT):
+    def __init__(self, n_channels: int = config.N_CHANNELS, dropout: float = config.DROPOUT,
+                 dilations: tuple[int, ...] = (1, 2, 4, 8),
+                 head_bias_init: float | None = None):
         super().__init__()
         ch = 64
         self.stem = nn.Sequential(
             nn.Conv1d(n_channels, ch, kernel_size=7, padding=3),
             nn.BatchNorm1d(ch), nn.ReLU(),
         )
-        # Dilations 1,2,4,8 widen the context to ~ a few seconds at 50 Hz.
         blocks = []
-        for d in (1, 2, 4, 8):
+        for d in dilations:
             blocks += [
                 nn.Conv1d(ch, ch, kernel_size=3, padding=d, dilation=d),
                 nn.BatchNorm1d(ch), nn.ReLU(),
@@ -88,6 +108,19 @@ class RepDensityCNN(nn.Module):
         self.tcn = nn.Sequential(*blocks)
         self.head = nn.Conv1d(ch, 1, kernel_size=1)
         self.act = nn.Softplus()
+        if head_bias_init is not None:
+            nn.init.constant_(self.head.bias, head_bias_init)
+
+    @staticmethod
+    def inverse_softplus(y: float) -> float:
+        """Bias b such that softplus(b) == y — the head init for a mean density y."""
+        return float(math.log(math.expm1(max(y, 1e-6))))
+
+    @property
+    def receptive_field(self) -> int:
+        """Frames of context behind each output sample — 7 + 2*sum(dilations)."""
+        dil = [m.dilation[0] for m in self.tcn if isinstance(m, nn.Conv1d)]
+        return 7 + 2 * sum(dil)
 
     def forward(self, x):
         h = self.tcn(self.stem(x))

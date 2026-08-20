@@ -27,12 +27,45 @@ class Dataset:
     classes: list[str]     # index -> class name (sorted, includes 'rest' if present)
 
 
+def apply_exercise_roster(sets: pd.DataFrame) -> pd.DataFrame:
+    """Rewrite sets recorded for exercises the watch no longer offers.
+
+    Retiring an exercise on the watch only changes what you can record NEXT — every
+    old session still carries it, so without this the classifier keeps a head slot
+    for a class the watch can never produce, and that dead class still competes for
+    probability against the ones you kept (it also drags the live confidence
+    threshold around in auto-detect).
+
+    Retired sets are rewritten to DISCARD_LABEL or REST_LABEL per
+    config.RETIRED_POLICY; both are already understood by every downstream consumer,
+    so nothing else needs to know a roster exists. The raw CSVs are untouched —
+    put a name back in KEEP_EXERCISES and its data comes back.
+    """
+    if not config.KEEP_EXERCISES:
+        return sets
+    keep = set(config.KEEP_EXERCISES) | {config.REST_LABEL, config.DISCARD_LABEL}
+    retired = ~sets["exercise"].isin(keep)
+    if not retired.any():
+        return sets
+
+    names = sorted(sets.loc[retired, "exercise"].unique())
+    replacement = (config.DISCARD_LABEL if config.RETIRED_POLICY == "drop"
+                   else config.REST_LABEL)
+    sets = sets.copy()
+    sets.loc[retired, "exercise"] = replacement
+    print(f"[roster] {int(retired.sum())} set(s) of {len(names)} retired exercise(s) "
+          f"-> '{replacement}': {', '.join(names)}")
+    return sets
+
+
 def load_raw() -> tuple[pd.DataFrame, pd.DataFrame]:
     readings = pd.read_csv(config.READINGS_CSV)
     sets = pd.read_csv(config.SETS_CSV)
     readings = readings.dropna(subset=config.CHANNELS + ["time_ms"])
     readings = readings.sort_values(["subject", "session", "time_ms"]).reset_index(drop=True)
-    return readings, sets
+    # One chokepoint: the classifier, both rep paths and evaluate_reps all load
+    # through here, so they can't disagree about which exercises exist.
+    return readings, apply_exercise_roster(sets)
 
 
 def label_samples(readings: pd.DataFrame, sets: pd.DataFrame) -> pd.DataFrame:

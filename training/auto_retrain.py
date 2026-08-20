@@ -5,7 +5,7 @@ concatenated). You drop those two files into ``training/data/``; this script —
 running on your Mac — notices when they change and runs the full pipeline:
 
     train.py             ->  export_coreml.py        (exercise classifier)
-    train_reps_model.py  ->  export_reps_coreml.py   (rep counter, if reps.csv)
+    train_reps_windows.py -> export_reps_coreml.py   (rep counter, if reps.csv)
 
 producing fresh ``artifacts/LiftLoggerClassifier.mlpackage`` and (once you've
 collected tap labels) ``artifacts/LiftLoggerRepCounter.mlpackage``, ready to drop
@@ -114,7 +114,7 @@ def run_pipeline(watch_dir: Path) -> bool:
     """Copy the CSVs into data/ and retrain BOTH models in one pass:
 
         train.py -> export_coreml.py            (exercise classifier — always)
-        train_reps_model.py -> export_reps_coreml.py   (rep counter — if reps.csv)
+        train_reps_windows.py -> export_reps_coreml.py   (rep counter — if reps.csv)
 
     Returns True if the classifier pipeline succeeds. The rep pipeline is best-effort:
     it's skipped without reps.csv and, if it fails (e.g. too few tagged bouts yet), it
@@ -143,7 +143,9 @@ def run_pipeline(watch_dir: Path) -> bool:
 
     # 2) Rep counter — only if you've collected tap labels; never fatal.
     if (config.DATA_DIR / "reps.csv").exists():
-        for script in ("train_reps_model.py", "export_reps_coreml.py"):
+        # The windowed trainer, not train_reps_model.py: same taps, ~20x the
+        # examples per set, and no duration/tempo entanglement. See rep_windows.py.
+        for script in ("train_reps_windows.py", "export_reps_coreml.py"):
             log(f"running {script} ...")
             result = subprocess.run([sys.executable, script], cwd=config.ROOT)
             if result.returncode != 0:

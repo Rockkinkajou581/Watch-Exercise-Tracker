@@ -27,6 +27,30 @@ REST_LABEL = "rest"     # everything outside a labeled set (reserved word — se
 INCLUDE_REST = True     # keep 'rest' as a predictable class so the watch knows when idle
 DISCARD_LABEL = "discard"  # a set the user marked bad on the watch; windows touching it are dropped
 
+# ----- exercise roster -----
+# The exercises the watch still offers (RecorderModel.exercises). Older sessions
+# in sets.csv may contain exercises you have since retired; anything not listed
+# here is handled by RETIRED_POLICY below. Leave the list EMPTY to train on
+# whatever happens to be in the data.
+# Keep in sync with `exercises` in RecorderModel.swift.
+KEEP_EXERCISES = [
+    "incline_chest_press", "machine_shoulder_press", "machine_row_wide",
+    "cable_push_down", "overhead_triceps", "dumbbell_hammer_curl",
+    "forearm_raises",
+]
+
+# What to do with a set whose exercise isn't in KEEP_EXERCISES:
+#   "drop" — treat it like a discarded set: every window touching it is thrown
+#       away. The default, because retired exercises are usually MECHANICALLY
+#       SIMILAR to ones you kept (flat vs. incline chest press, cable/machine curl
+#       vs. hammer curl, forearm curl vs. forearm raises). Calling those windows
+#       "rest" would label near-identical signal both ways and actively damage the
+#       class you kept.
+#   "rest" — fold them into the idle class, teaching the model "arm moving, but
+#       not one of my exercises → don't log a set". Only worth it for retired
+#       exercises that look nothing like a kept one.
+RETIRED_POLICY = "drop"
+
 # ----- set-boundary trim -----
 # Shrink each labeled set interval before labeling, so button-press slop isn't
 # learned as the exercise:
@@ -67,6 +91,37 @@ REP_MIN_TAGGED = 1                 # ignore sets with fewer tagged reps than thi
 REP_BATCH_SIZE = 8
 REP_EPOCHS = 400
 REP_EARLY_STOP_PATIENCE = 40
+
+# ----- supervised rep counting, WINDOWED (preferred: rep_windows.py) -----
+# The bout framing above has two problems that windows fix:
+#   1. one training example per SET, so ~50 examples where the classifier has
+#      thousands. Per-rep taps are dense labels — slicing a set into overlapping
+#      windows turns each set into dozens of examples with no new data collected.
+#   2. resampling every set to REP_BOUT_LEN frames entangles set DURATION with
+#      rep frequency: the same movement at the same tempo looks 5x faster in a
+#      10 s set than in a 50 s set. Windows are a fixed number of SECONDS, so
+#      tempo stays in real Hz and that nuisance variable disappears.
+# The window must span at least two rep periods or the task isn't learnable —
+# REP_PERIOD_RANGE_S tops out at 4 s/rep, hence 8 s.
+REP_WINDOW_SEC = 8.0
+REP_WINDOW = int(round(REP_WINDOW_SEC * FS))          # 400 samples @ 50 Hz
+REP_WIN_STRIDE_SEC = 1.0
+REP_WIN_STRIDE = int(round(REP_WIN_STRIDE_SEC * FS))  # 50 -> ~23 windows per 30 s set
+# Gaussian label half-width in SECONDS (the bout path's REP_DENSITY_SIGMA is in
+# resampled frames, which is exactly the units problem windows exist to avoid).
+REP_DENSITY_SIGMA_SEC = 0.20                          # 10 frames @ 50 Hz
+
+# Window-scale training hyperparameters. There are ~50x more examples here than
+# in the bout path, so these look like the classifier's, not REP_* above.
+# A frame is now a real 1/FS second, so the density net needs a receptive field
+# that spans a rep. RF = 7 + 2*sum(dilations): the bout path's (1,2,4,8) gives 37
+# frames = 0.74 s, less than one rep of a slow exercise; this reaches 261 frames
+# = 5.2 s, enough context to see periodicity without exceeding the 8 s window.
+REP_WIN_DILATIONS = (1, 2, 4, 8, 16, 32, 64)
+
+REP_WIN_BATCH_SIZE = 64
+REP_WIN_EPOCHS = 120
+REP_WIN_EARLY_STOP_PATIENCE = 15
 
 # ----- training -----
 SEED = 1337

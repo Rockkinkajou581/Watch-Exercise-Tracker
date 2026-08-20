@@ -377,6 +377,19 @@ extension SessionStore: WCSessionDelegate {
         handleWatchMessage(message)
     }
 
+    /// Same, for messages the watch wants an answer to. `set_end` is sent this way:
+    /// the watch pre-fills its rep-entry screen with the tally we counted here, so
+    /// a set tagged on the phone doesn't have to be dialed in again on the wrist.
+    /// The reply is hopped to main *after* `handleWatchMessage`'s own main hop, so
+    /// it reports the final count for the set that just closed.
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any],
+                 replyHandler: @escaping ([String: Any]) -> Void) {
+        handleWatchMessage(message)
+        DispatchQueue.main.async {
+            replyHandler(["repTaps": self.repSetCount, "tagging": self.repSessionActive])
+        }
+    }
+
     /// Files arrive here from the watch. The system deletes file.fileURL as
     /// soon as this method returns, so the move must happen synchronously.
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
