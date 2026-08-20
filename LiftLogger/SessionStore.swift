@@ -20,14 +20,50 @@ import WatchConnectivity
 final class SessionStore: NSObject, ObservableObject {
 
     struct SessionFolder: Identifiable {
-        let id: String        // session ID, e.g. "20260610-141503"
+        let id: String        // folder name, e.g. "Jun-10"
         let files: [URL]
+        /// The watch's original session id ("20260610-141503") from the ".sid"
+        /// marker — the sortable timestamp everything date-shaped derives from.
+        var sid: String = ""
     }
 
     @Published var subject: String = "S01"
     @Published var sessions: [SessionFolder] = []
     @Published var mergedURLs: [URL] = []
     @Published var status: String = ""
+
+    /// Parsed exercise → set → reps view of every received session, newest
+    /// first. This is what the Sessions and Session Detail screens render.
+    @Published var summaries: [SessionSummary] = []
+    /// False until the first refresh lands, so the list can show its loading
+    /// placeholder instead of flashing the empty state.
+    @Published var hasLoaded = false
+
+    /// The exercises the watch can log — the picker used to confirm an
+    /// uncertain classifier label. Kept in sync with RecorderModel.exercises.
+    static let knownExercises = [
+        "incline_chest_press", "flat_chest_press", "machine_shoulder_press",
+        "cable_side_delt", "cable_front_delt", "seated_tricep_dips",
+        "overhead_triceps", "cable_push_down", "machine_row_wide",
+        "machine_pull_down", "cable_curl", "dumbbell_hammer_curl",
+        "machine_arm_curl", "wrist_extensions", "forearm_curl", "forearm_raises",
+    ]
+
+    /// Sessions whose file set looks half-delivered (§2.4 pending strip).
+    var pendingSessions: [SessionSummary] {
+        summaries.filter { Self.isPending($0.files) }
+    }
+
+    /// A manual session ships readings.csv *and* sets.csv; having exactly one of
+    /// them means the other transfer hasn't landed yet. An auto-detect session
+    /// ships detected.csv alone and is never pending.
+    static func isPending(_ files: [URL]) -> Bool {
+        let names = Set(files.map(\.lastPathComponent))
+        if names.contains("detected.csv") { return false }
+        let hasReadings = names.contains("readings.csv")
+        let hasSets = names.contains("sets.csv")
+        return hasReadings != hasSets
+    }
 
     // MARK: - live rep tagging (observer taps once per rep during a watch set)
     @Published var repSessionActive = false      // a manual watch session is recording
@@ -36,6 +72,8 @@ final class SessionStore: NSObject, ObservableObject {
     @Published var repSetCount = 0               // taps in the current/most-recent set
     @Published var repSessionTotal = 0           // taps across the whole session
     @Published var repStatus = "Open this before starting a session on the watch."
+    /// Drives the §6 "WATCH DISCONNECTED" state on the tagger.
+    @Published var watchReachable = false
 
     // Clock anchor from the watch: watch-uptime and wall-clock captured together,
     // used to map a phone tap (wall clock) onto the watch IMU timeline.
@@ -125,11 +163,49 @@ final class SessionStore: NSObject, ObservableObject {
                     at: dir, includingPropertiesForKeys: nil)) ?? [])
                     .filter { !$0.lastPathComponent.hasPrefix(".") }   // hide .sid / .DS_Store
                     .sorted { $0.lastPathComponent < $1.lastPathComponent }
-                return (SessionFolder(id: dir.lastPathComponent, files: files), sid)
+                return (SessionFolder(id: dir.lastPathComponent, files: files, sid: sid), sid)
             }
             .sorted { $0.sortKey > $1.sortKey }    // newest first by real timestamp
             .map(\.folder)
-        DispatchQueue.main.async { self.sessions = list }
+
+        let fallback = subject
+        let parsed = list.map {
+            SessionParser.summary(id: $0.id, sessionID: $0.sid, files: $0.files,
+                                  fallbackSubject: fallback)
+        }
+        DispatchQueue.main.async {
+            self.sessions = list
+            self.summaries = parsed
+            self.hasLoaded = true
+        }
+    }
+
+    /// §3.3 "Label" action — the observer names an uncertain set. Rewrites that
+    /// row in detected.csv with the chosen exercise at confidence 1.0, so the
+    /// correction persists into the merged training export rather than living
+    /// only in the UI.
+    func confirmLabel(sessionID folderID: String, startMs: Double, exercise: String) {
+        guard let folder = sessions.first(where: { $0.id == folderID }),
+              let url = folder.files.first(where: { $0.lastPathComponent == "detected.csv" }),
+              let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+
+        var lines = text.components(separatedBy: "\n")
+        for i in lines.indices {
+            let f = lines[i].split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard f.count >= 7, let start = Double(f[3]),
+                  abs(start - startMs) < 0.5 else { continue }
+            lines[i] = "\(f[0]),\(f[1]),\(exercise),\(f[3]),\(f[4]),\(f[5]),1.000"
+            break
+        }
+
+        do {
+            try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            refresh()
+        } catch {
+            status = "label failed: \(error.localizedDescription)"
+        }
     }
 
     func sendSubjectToWatch() {
@@ -280,7 +356,15 @@ extension SessionStore: WCSessionDelegate {
 
     func session(_ session: WCSession,
                  activationDidCompleteWith activationState: WCSessionActivationState,
-                 error: Error?) {}
+                 error: Error?) {
+        let reachable = session.isReachable
+        DispatchQueue.main.async { self.watchReachable = reachable }
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        let reachable = session.isReachable
+        DispatchQueue.main.async { self.watchReachable = reachable }
+    }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
 
