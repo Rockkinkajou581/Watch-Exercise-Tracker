@@ -20,22 +20,6 @@ watch (RecorderModel.swift)  ->  readings.csv + sets.csv  ->  this pipeline  -> 
 | `export_coreml.py` | convert the trained CNN to `.mlpackage` |
 | `make_synthetic.py` | generate fake data so you can run all of the above **today** |
 
-## Quick start (no real data yet)
-
-```bash
-cd training
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-python make_synthetic.py     # writes data/readings.csv + data/sets.csv
-python baseline_rf.py        # sanity-check baseline
-python train.py              # trains the CNN, writes artifacts/
-python export_coreml.py      # writes artifacts/LiftLoggerClassifier.mlpackage
-```
-
-Synthetic accuracy will be ~perfect — the fake exercises are trivially separable.
-That only proves the plumbing works, **not** that the model is good.
-
 ## With real data
 
 1. In the iPhone app, tap **merged export** and AirDrop / save `readings.csv` and
@@ -69,7 +53,7 @@ Engine).
   Remarkably hard to beat on small data, robust, interpretable (feature importance
   tells you which axes matter), trains in seconds. Downside: you'd have to
   re-implement the feature extraction in Swift to deploy it, and it plateaus below
-  a good CNN as classes/data grow. Keep it as the sanity check.
+  a good CNN as classes/data grow.
 
 ### Worth trying once you have lots of data
 
@@ -78,15 +62,6 @@ Engine).
   slower, recurrent layers are fiddlier to convert and less Neural-Engine-friendly.
 - **TCN (dilated temporal convolutions)** — like the CNN but a larger receptive
   field for cheap; good if some exercises have long, slow reps.
-
-### Mediocre
-
-- **Plain MLP on a flattened window** — throws away time/translation structure;
-  needs reps aligned; brittle. Fine only as a throwaway.
-- **Transformer / attention models** — data-hungry and heavy. With a few thousand
-  hand-collected windows they'll overfit, and they're the worst to squeeze onto a
-  watch. Maybe revisit at 20–30 classes *if* you reach tens of thousands of
-  windows — but a CNN will likely still win on-device.
 
 ### Avoid (for on-watch deployment)
 
@@ -98,7 +73,7 @@ Engine).
 
 ## Scaling to 20–30 exercises
 
-The architecture doesn't need to change much — widen the conv channels a little and
+The architecture doesn't need to change much, just widen the conv channels a little and
 collect more data. What actually moves accuracy:
 
 1. **Data variety beats model fanciness.** Multiple subjects, both wrists, watch
