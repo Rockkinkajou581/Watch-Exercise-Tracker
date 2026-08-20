@@ -88,3 +88,56 @@ collect more data. What actually moves accuracy:
 4. **Class imbalance.** `rest` will dominate; training already applies class
    weights, and `metrics.txt` reports per-class F1 so a high overall accuracy can't
    hide a class the model never gets right.
+
+## Rep counting: two training paths
+
+Both learn from the same labels — the per-rep taps the phone Rep Tagger writes to
+`reps.csv` — and both produce `artifacts/LiftLoggerRepCounter.mlpackage`. They
+differ in what one training example *is*.
+
+| | `train_reps_model.py` (bout) | `train_reps_windows.py` (window) |
+|---|---|---|
+| one example | a whole set, resampled to `REP_BOUT_LEN` frames | an 8 s window at real 50 Hz |
+| examples from 50 sets | ~50 | ~1,100 |
+| time axis | normalized away — a 10 s and a 50 s set share one grid | real seconds |
+| built by | `rep_events.py` | `rep_windows.py` |
+
+The window path is the default (`auto_retrain.py` runs it, `export_reps_coreml.py`
+exports it). Two reasons:
+
+1. **Density of supervision.** The taps are per-rep, so a set can be sliced. One
+   example per set left the trainer with ~5 gradient steps per epoch, BatchNorm
+   estimating statistics from 8 examples, and a val metric computed over ~7 bouts
+   — quantized to ~0.14 and mostly noise, so checkpoint selection was near random.
+2. **Duration/tempo entanglement.** Squeezing every set onto a fixed frame grid
+   makes the same movement at the same tempo look 5× faster in a 10 s set than in
+   a 50 s set. Fixed-*second* windows keep tempo in real Hz.
+
+Two things the real-time framing forces, both handled in `config.py`:
+
+- **Receptive field.** `RF = 7 + 2*sum(dilations)`. The bout default `(1,2,4,8)`
+  is 37 frames — fine when a frame is 1/256th of a set, but only **0.74 s** in
+  real time, less than one rep of a slow exercise. `REP_WIN_DILATIONS` reaches
+  5.2 s.
+- **Head bias.** A real density averages `reps/frames` ≈ 0.01 per frame, while an
+  untuned Softplus head starts at 0.69 — 70× too high. The trainer initializes the
+  bias to `inverse_softplus(mean target)`. Without it the model spends its whole
+  epoch budget deflating, which *looks* like convergence.
+
+Splits are by **subject** when there are ≥ 3, else by **set** — never by window.
+Two overlapping windows from one set are nearly the same signal, so a window-level
+split would put a near-duplicate of every val example into train and report a
+beautiful, meaningless number. Val and test metrics are always computed at set
+level, by sliding the window over the whole bout and overlap-adding
+(`rep_windows.bout_count`) — the same thing `RepDensityCounter` does on the watch.
+
+Keep both paths around and compare on the same data:
+
+```
+python train_reps_model.py      # bout baseline
+python train_reps_windows.py    # windowed
+python evaluate_reps.py         # unsupervised autocorrelation baseline
+```
+
+If the windowed model doesn't clearly beat the other two, the bottleneck is data
+quantity, not architecture — keep tagging.

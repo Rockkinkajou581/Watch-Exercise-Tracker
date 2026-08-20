@@ -147,9 +147,11 @@ struct WatchRootView: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.7)
                 .lineLimit(2)
-            Text("Reps")
+            Text(model.repsFromPhone ? "Reps — from phone taps" : "Reps")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(model.repsFromPhone ? Color.green : Color.secondary)
+                .minimumScaleFactor(0.8)
+                .lineLimit(1)
             HStack(spacing: 14) {
                 Button { model.decrementReps() } label: {
                     Image(systemName: "minus.circle.fill")
