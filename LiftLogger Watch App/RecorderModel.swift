@@ -109,7 +109,9 @@ final class RecorderModel: NSObject, ObservableObject {
     let exercises = [
         "incline_chest_press", "machine_shoulder_press", "machine_row_wide",
         "cable_push_down", "overhead_triceps", "dumbbell_hammer_curl",
-        "forearm_raises",
+        "forearm_raises", "lat_pulldown", "machine_chest_press", "cable_curl",
+        "squat", "dumbbell_rdl", "machine_calf_raise",
+        "dumbbell_bulgarian_split_squat", "dumbbell_curl",
     ]
 
     // MARK: - private

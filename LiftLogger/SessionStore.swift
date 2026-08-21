@@ -47,6 +47,8 @@ final class SessionStore: NSObject, ObservableObject {
         "overhead_triceps", "cable_push_down", "machine_row_wide",
         "machine_pull_down", "cable_curl", "dumbbell_hammer_curl",
         "machine_arm_curl", "wrist_extensions", "forearm_curl", "forearm_raises",
+        "lat_pulldown", "machine_chest_press", "squat", "dumbbell_rdl",
+        "machine_calf_raise", "dumbbell_bulgarian_split_squat", "dumbbell_curl",
     ]
 
     /// Sessions whose file set looks half-delivered (§2.4 pending strip).
