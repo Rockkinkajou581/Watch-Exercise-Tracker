@@ -20,9 +20,17 @@ feature's NAME and LENGTH that it reads out of the compiled model:
 
 Output in both cases is a non-negative per-frame density; reps = its integral.
 
+    --period                  from train_reps_period.py (no taps required)
+        input  "imu_bout":   (1, REP_PERIOD_BOUT_LEN, N_CHANNELS) whole set,
+        edge-padded/cropped (not resampled — time stays real). Output is a single
+        period in SECONDS; the watch divides the bout's real duration by it and
+        rounds. Saved separately as LiftLoggerRepPeriodCounter.mlpackage, since its
+        input length and output semantics differ from the density models above.
+
 Run from inside the training/ folder:
     python export_reps_coreml.py            # window model
     python export_reps_coreml.py --bout     # legacy bout model
+    python export_reps_coreml.py --period   # period-regression model, no taps
 """
 import argparse
 
@@ -30,14 +38,55 @@ import numpy as np
 import torch
 
 import config
-from models import RepDensityCNN, RepExportWrapper
+from models import RepDensityCNN, RepExportWrapper, RepPeriodCNN, RepPeriodExportWrapper
+
+
+def export_period():
+    import coremltools as ct
+
+    ckpt = config.ARTIFACTS / "rep_period_cnn.pt"
+    if not ckpt.exists():
+        raise SystemExit(f"\n{ckpt} not found — train it first:\n    python train_reps_period.py")
+
+    norm = np.load(config.ARTIFACTS / "rep_period_norm.npz")
+    model = RepPeriodCNN()
+    model.load_state_dict(torch.load(ckpt, map_location="cpu"))
+    model.eval()
+
+    length = config.REP_PERIOD_BOUT_LEN
+    wrapper = RepPeriodExportWrapper(model, norm["mean"], norm["std"]).eval()
+    example = torch.randn(1, length, config.N_CHANNELS)   # (B, L, C)
+    traced = torch.jit.trace(wrapper, example)
+
+    mlmodel = ct.convert(
+        traced,
+        inputs=[ct.TensorType(name="imu_bout", shape=(1, length, config.N_CHANNELS))],
+        minimum_deployment_target=ct.target.watchOS9,
+        compute_units=ct.ComputeUnit.ALL,
+    )
+    mlmodel.short_description = (
+        "LiftLogger period-based rep counter — 6-channel IMU, "
+        "count = bout duration / predicted period (seconds)")
+    mlmodel.input_description["imu_bout"] = (
+        f"{length}x{config.N_CHANNELS}: rows=time (set edge-padded/cropped to "
+        f"{config.REP_PERIOD_BOUT_SEC:.0f} s at {config.FS} Hz), cols={config.CHANNELS}")
+
+    out = config.ARTIFACTS / "LiftLoggerRepPeriodCounter.mlpackage"
+    mlmodel.save(str(out))
+    print(f"saved -> {out}   (input imu_bout, {length} frames, output = period in seconds)")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bout", action="store_true",
-                    help="export the whole-bout model (train_reps_model.py) instead")
+                    help="export the whole-bout density model (train_reps_model.py) instead")
+    ap.add_argument("--period", action="store_true",
+                    help="export the period-regression model (train_reps_period.py, no taps)")
     args = ap.parse_args()
+
+    if args.period:
+        export_period()
+        return
 
     import coremltools as ct
 

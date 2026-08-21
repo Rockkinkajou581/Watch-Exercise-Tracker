@@ -130,6 +130,59 @@ class RepDensityCNN(nn.Module):
         return self.act(self.head(h)).squeeze(1)     # (B, L)
 
 
+class RepPeriodCNN(nn.Module):
+    """Predicts a bout's dominant rep period from raw IMU. Input (B, C, L) -> (B,).
+
+    Same conv+pool shape as CNN1D (global-average-pooled, so it stays small and
+    robust on little data), but a scalar regression head instead of classification
+    logits. Output is log(period_seconds): periods are ratio-scale (a 2 s vs 1 s
+    rep is "twice as slow", not "1 s slower"), and training in log-space keeps a
+    fast rep and a slow rep from contributing wildly different-magnitude losses.
+    See config.py's PERIOD section for why period (not raw count) is the target.
+    """
+    def __init__(self, n_channels: int = config.N_CHANNELS, dropout: float = config.DROPOUT):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv1d(n_channels, 64, kernel_size=7, padding=3),
+            nn.BatchNorm1d(64), nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.BatchNorm1d(128), nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128), nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1),
+        )
+        self.head = nn.Sequential(
+            nn.Flatten(),
+            nn.Dropout(dropout),
+            nn.Linear(128, 1),
+        )
+
+    def forward(self, x):
+        return self.head(self.features(x)).squeeze(1)   # (B,) log-period seconds
+
+
+class RepPeriodExportWrapper(nn.Module):
+    """Wraps a trained RepPeriodCNN for deployment.
+
+    Accepts (B, L, C) raw IMU (the natural on-watch bout layout), normalizes with
+    fixed train statistics, and returns the period in SECONDS (not log) — so the
+    Swift side just divides the bout's real duration by this and rounds, with no
+    log-space math on device.
+    """
+    def __init__(self, model: RepPeriodCNN, mean, std):
+        super().__init__()
+        self.model = model
+        self.register_buffer("mean", torch.as_tensor(mean, dtype=torch.float32).view(1, -1, 1))
+        self.register_buffer("std", torch.as_tensor(std, dtype=torch.float32).view(1, -1, 1))
+
+    def forward(self, x):
+        x = x.transpose(1, 2)            # (B, L, C) -> (B, C, L)
+        x = (x - self.mean) / self.std
+        return torch.exp(self.model(x))
+
+
 class RepExportWrapper(nn.Module):
     """Wraps a trained RepDensityCNN for deployment.
 

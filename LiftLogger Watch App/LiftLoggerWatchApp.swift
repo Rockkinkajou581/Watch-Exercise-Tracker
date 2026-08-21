@@ -58,6 +58,17 @@ struct WatchRootView: View {
                 }
                 .tint(.blue)
 
+                VStack(spacing: 4) {
+                    Text("Rep counter").font(.footnote).foregroundStyle(.secondary)
+                    Picker("Rep counter", selection: $model.repCountingMode) {
+                        ForEach(RecorderModel.RepCountingMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+
                 if !model.pendingFiles.isEmpty {
                     Button {
                         model.resendPending()
@@ -204,8 +215,10 @@ struct WatchRootView: View {
 
             LabeledContent("Logged", value: "\(model.detectedCount)")
                 .font(.footnote)
-            LabeledContent("Last reps", value: "\(model.lastDetectedReps)")
-                .font(.footnote)
+
+            if model.detectedCount > 0 {
+                lastDetectedFixer
+            }
 
             Button(role: .destructive) {
                 model.endSession()
@@ -215,6 +228,51 @@ struct WatchRootView: View {
             .tint(.red)
         }
         .padding()
+    }
+
+    /// Fix or confirm the just-logged set's rep count right here — the live,
+    /// no-tapper alternative to correcting it later on the phone. Any tap here
+    /// (nudge or checkmark) marks the set reps_confirmed, so it becomes training
+    /// data for the period-regression counter (see RepCountingMode.periodModel).
+    private var lastDetectedFixer: some View {
+        VStack(spacing: 4) {
+            Text(model.lastDetectedExercise.replacingOccurrences(of: "_", with: " "))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            HStack(spacing: 10) {
+                Button { model.adjustLastDetectedReps(by: -1) } label: {
+                    Image(systemName: "minus.circle.fill")
+                }
+                .buttonStyle(.plain)
+
+                Text("\(model.lastDetectedReps)")
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .frame(minWidth: 34)
+                    .contentTransition(.numericText())
+
+                Button { model.adjustLastDetectedReps(by: 1) } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .buttonStyle(.plain)
+
+                Button { model.confirmLastDetectedReps() } label: {
+                    Image(systemName: model.lastDetectedConfirmed
+                          ? "checkmark.circle.fill" : "checkmark.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(model.lastDetectedConfirmed ? Color.green : Color.primary)
+            }
+            .font(.title3)
+
+            Text("LAST SET · TAP TO FIX")
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.5)
+                .foregroundStyle(.tertiary)
+        }
     }
 
     // MARK: - in set

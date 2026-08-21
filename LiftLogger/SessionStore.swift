@@ -198,7 +198,10 @@ final class SessionStore: NSObject, ObservableObject {
                 .map { $0.trimmingCharacters(in: .whitespaces) }
             guard f.count >= 7, let start = Double(f[3]),
                   abs(start - startMs) < 0.5 else { continue }
-            lines[i] = "\(f[0]),\(f[1]),\(exercise),\(f[3]),\(f[4]),\(f[5]),1.000"
+            // Preserve column 8 (reps_confirmed) if a reps correction already set
+            // it — relabeling shouldn't silently undo an earlier reps fix.
+            let repsConfirmed = f.count >= 8 ? f[7] : "0"
+            lines[i] = "\(f[0]),\(f[1]),\(exercise),\(f[3]),\(f[4]),\(f[5]),1.000,\(repsConfirmed)"
             break
         }
 
@@ -207,6 +210,35 @@ final class SessionStore: NSObject, ObservableObject {
             refresh()
         } catch {
             status = "label failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// The reps-correction counterpart to `confirmLabel`: the observer noticed the
+    /// detected count was off by a rep or two and dialed in the true value. Rewrites
+    /// that row's reps and stamps reps_confirmed=1, so `buildMergedExport` folds it
+    /// into the merged sets.csv — cheap ground truth for evaluate_reps.py's tuning
+    /// of the unsupervised counter, no phone tapper required.
+    func confirmReps(sessionID folderID: String, startMs: Double, reps: Int) {
+        guard let folder = sessions.first(where: { $0.id == folderID }),
+              let url = folder.files.first(where: { $0.lastPathComponent == "detected.csv" }),
+              let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+
+        var lines = text.components(separatedBy: "\n")
+        for i in lines.indices {
+            let f = lines[i].split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard f.count >= 7, let start = Double(f[3]),
+                  abs(start - startMs) < 0.5 else { continue }
+            lines[i] = "\(f[0]),\(f[1]),\(f[2]),\(f[3]),\(f[4]),\(reps),\(f[6]),1"
+            break
+        }
+
+        do {
+            try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            refresh()
+        } catch {
+            status = "reps fix failed: \(error.localizedDescription)"
         }
     }
 
@@ -252,6 +284,17 @@ final class SessionStore: NSObject, ObservableObject {
                 case "reps.csv":
                     reps += body
                     nReps += rows.count
+                case "detected.csv":
+                    // Only rows the observer explicitly corrected (reps_confirmed
+                    // == "1", column 8) count as ground truth — an uncorrected
+                    // model guess would poison evaluate_reps.py's accuracy numbers.
+                    for row in rows {
+                        let f = row.split(separator: ",", omittingEmptySubsequences: false)
+                        guard f.count >= 8, f[7].trimmingCharacters(in: .whitespaces) == "1"
+                        else { continue }
+                        sets += "\(f[0]),\(f[1]),\(f[2]),\(f[3]),\(f[4]),\(f[5])\n"
+                        nSets += 1
+                    }
                 default:
                     break
                 }

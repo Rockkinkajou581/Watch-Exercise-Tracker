@@ -125,6 +125,30 @@ REP_WIN_BATCH_SIZE = 64
 REP_WIN_EPOCHS = 120
 REP_WIN_EARLY_STOP_PATIENCE = 15
 
+# ----- supervised rep counting, PERIOD (no taps: train_reps_period.py) -----
+# Both models above need reps.csv (per-rep taps from the phone tagger) — dense
+# supervision that requires someone tapping live during the set. This one trains
+# on nothing but the final `reps` integer already in sets.csv: every hand-dialed
+# manual set, plus any auto-detected set corrected via the phone's "Fix reps"
+# sheet (SessionStore.confirmReps, folded in by buildMergedExport). The trick that
+# makes a single scalar per set enough supervision: predict the bout's dominant
+# rep PERIOD instead of its count. Period is duration-independent and lives in a
+# narrow physical range (REP_PERIOD_RANGE_S above), so it's a far more
+# sample-efficient regression target than raw count, which entangles tempo with
+# however long the set happened to run. Trained in log-seconds (periods are
+# ratio-scale); count at inference/eval is duration_s / exp(prediction).
+REP_PERIOD_BOUT_SEC = 12.0            # seconds of IMU fed to the model per bout
+REP_PERIOD_BOUT_LEN = int(round(REP_PERIOD_BOUT_SEC * FS))
+REP_PERIOD_MIN_REPS = 2               # ignore sets with fewer true reps than this
+
+# ----- rep-count calibration (evaluate_reps.py) -----
+# A cheap alternative/complement to training a new model: fit a per-exercise
+# linear correction (true ~= a*pred + b) on top of whichever counter you're
+# already running, using the same (true, pred) pairs evaluate_reps.py collects.
+# Fixes a systematic bias (e.g. "always +1 on squats") with a handful of examples
+# and no training run.
+REP_CALIBRATION_MIN_N = 5             # need at least this many sets to fit a line
+
 # ----- training -----
 SEED = 1337
 BATCH_SIZE = 64

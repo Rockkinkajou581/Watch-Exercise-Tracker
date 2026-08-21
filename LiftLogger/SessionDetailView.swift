@@ -16,6 +16,8 @@ struct SessionDetailView: View {
 
     /// The uncertain set awaiting a label from the picker sheet.
     @State private var labeling: SetEntry?
+    /// The detected set whose rep count is being corrected.
+    @State private var correctingReps: SetEntry?
 
     /// Re-read from the store so a confirmed label refreshes this screen.
     private var live: SessionSummary {
@@ -31,9 +33,11 @@ struct SessionDetailView: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(live.groups) { group in
-                            ExerciseCard(group: group) { entry in
+                            ExerciseCard(group: group, onLabel: { entry in
                                 labeling = entry
-                            }
+                            }, onFixReps: { entry in
+                                correctingReps = entry
+                            })
                         }
                     }
                 }
@@ -66,6 +70,12 @@ struct SessionDetailView: View {
             ExercisePickerSheet { choice in
                 store.confirmLabel(sessionID: live.id, startMs: entry.startMs, exercise: choice)
                 labeling = nil
+            }
+        }
+        .sheet(item: $correctingReps) { entry in
+            RepsCorrectionSheet(initialReps: entry.reps) { corrected in
+                store.confirmReps(sessionID: live.id, startMs: entry.startMs, reps: corrected)
+                correctingReps = nil
             }
         }
     }
@@ -129,6 +139,7 @@ struct SessionDetailView: View {
 struct ExerciseCard: View {
     let group: ExerciseGroup
     var onLabel: (SetEntry) -> Void
+    var onFixReps: (SetEntry) -> Void
 
     private var tint: Color {
         group.isConfirmed ? DS.exerciseTint(group.tintIndex) : DS.textTertiary
@@ -205,14 +216,23 @@ struct ExerciseCard: View {
     }
 
     private func setColumn(_ entry: SetEntry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(entry.reps)")
-                .font(.dsNumeralSet)
-                .tracking(DSTracking.numeralSet)
-                .monospacedDigit()
-                .foregroundStyle(group.isConfirmed && entry.reps > 0
-                                 ? DS.textPrimary : DS.textTertiary)
-                .contentTransition(.numericText())
+        // Only detected.csv rows (confidence != nil) came from a model guess —
+        // sets.csv reps were already dialed in by hand, nothing to correct.
+        let fixable = entry.confidence != nil
+        return VStack(alignment: .leading, spacing: 6) {
+            Button {
+                onFixReps(entry)
+            } label: {
+                Text("\(entry.reps)")
+                    .font(.dsNumeralSet)
+                    .tracking(DSTracking.numeralSet)
+                    .monospacedDigit()
+                    .foregroundStyle(group.isConfirmed && entry.reps > 0
+                                     ? DS.textPrimary : DS.textTertiary)
+                    .contentTransition(.numericText())
+            }
+            .buttonStyle(.plain)
+            .disabled(!fixable)
 
             bar(for: entry)
 
@@ -222,7 +242,8 @@ struct ExerciseCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Set \(entry.setNumber), \(entry.reps) reps")
+        .accessibilityLabel("Set \(entry.setNumber), \(entry.reps) reps"
+                            + (fixable ? ", tap to correct" : ""))
     }
 
     @ViewBuilder
@@ -244,6 +265,77 @@ struct ExerciseCard: View {
             }
             .frame(height: DS.barHeight)
         }
+    }
+}
+
+// MARK: - reps correction sheet
+
+/// Fixes a detected set's rep count by hand — the low-friction alternative to
+/// running the phone tapper live during the set. Confirming here marks the row
+/// reps_confirmed=1 so it feeds evaluate_reps.py on the next merged export.
+struct RepsCorrectionSheet: View {
+    let initialReps: Int
+    var onConfirm: (Int) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var reps: Int
+
+    init(initialReps: Int, onConfirm: @escaping (Int) -> Void) {
+        self.initialReps = initialReps
+        self.onConfirm = onConfirm
+        _reps = State(initialValue: initialReps)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("How many reps were actually in this set?")
+                    .font(.dsBody)
+                    .foregroundStyle(DS.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12)
+
+                HStack(spacing: 20) {
+                    Button { reps = max(0, reps - 1) } label: {
+                        Image(systemName: "minus.circle.fill").font(.title)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DS.accent)
+
+                    Text("\(reps)")
+                        .font(.dsNumeralTagger)
+                        .monospacedDigit()
+                        .frame(minWidth: 70)
+                        .contentTransition(.numericText())
+
+                    Button { reps += 1 } label: {
+                        Image(systemName: "plus.circle.fill").font(.title)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DS.accent)
+                }
+
+                Button {
+                    onConfirm(reps)
+                    dismiss()
+                } label: {
+                    Text("Save Correction").bold().frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(DS.accent)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, DS.screenHPadding)
+            .background(DS.canvas)
+            .navigationTitle("Fix Reps")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }.foregroundStyle(DS.accent)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }
 

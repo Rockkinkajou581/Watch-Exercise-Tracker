@@ -54,7 +54,7 @@ class RepWindowDataset:
     bouts: list[Bout]      # the sets these windows came from, for set-level scoring
 
 
-def _uniform_resample(seg: np.ndarray, times_ms: np.ndarray, fs: int) -> np.ndarray:
+def uniform_resample(seg: np.ndarray, times_ms: np.ndarray, fs: int) -> np.ndarray:
     """Resample (T, C) sampled at `times_ms` onto an even fs-Hz grid, keeping real time.
 
     Unlike rep_events._resample this does NOT normalize duration away: the output
@@ -151,7 +151,7 @@ def build_bouts() -> list[Bout]:
         if len(rep_times) < config.REP_MIN_TAGGED:
             continue
 
-        X = _uniform_resample(seg, times, config.FS)
+        X = uniform_resample(seg, times, config.FS)
         # Taps land on the uniform grid by elapsed seconds, not by fraction of the
         # set — that difference is the whole point of the real-time framing.
         rep_idx = (rep_times - times[0]) / 1000.0 * config.FS

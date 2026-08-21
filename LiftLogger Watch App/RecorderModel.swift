@@ -28,6 +28,17 @@ final class RecorderModel: NSObject, ObservableObject {
 
     enum Phase { case idle, resting, countdown, inSet, enteringReps, autoDetecting }
 
+    /// Which rep counter `closeActiveSet` uses for auto-detected sets.
+    /// `.auto` matches the old always-on behavior: prefer the trained density
+    /// model, fall back to the unsupervised counter when it isn't bundled.
+    enum RepCountingMode: String, CaseIterable, Identifiable {
+        case auto = "Auto"
+        case unsupervised = "Unsup"
+        case densityModel = "CNN"
+        case periodModel = "Period"
+        var id: String { rawValue }
+    }
+
     /// Reserved label for sets the user marks as bad. Training drops any window
     /// touching a discard interval. MUST match config.DISCARD_LABEL in the Python.
     static let discardLabel = "discard"
@@ -50,6 +61,9 @@ final class RecorderModel: NSObject, ObservableObject {
     /// constant here — it's read off the compiled model, so retraining with a
     /// different REP_WINDOW needs no Swift change.
     static let repWinStride = 50
+    /// Frames a bout is edge-padded/cropped to for the period-regression model.
+    /// MUST match config.REP_PERIOD_BOUT_LEN (12 s at 50 Hz).
+    static let repPeriodBoutLen = 600
     /// Default rep count pre-filled on the End Set screen (manual sessions).
     static let defaultReps = 8
     /// Run a prediction every this many new samples (~2x/sec at 50 Hz).
@@ -97,11 +111,21 @@ final class RecorderModel: NSObject, ObservableObject {
     @Published var status: String = "ready"
     @Published var pendingFiles: [URL] = []   // recorded but not yet transferred
 
+    /// Persisted so the choice sticks across app relaunches. Only affects
+    /// auto-detect sessions — manual sessions get their count from the phone
+    /// tagger or the dial, never from either counter.
+    @Published var repCountingMode: RepCountingMode = .auto {
+        didSet { UserDefaults.standard.set(repCountingMode.rawValue, forKey: Self.repCountingModeKey) }
+    }
+    private static let repCountingModeKey = "repCountingMode"
+
     // Live auto-detect UI state (mutate on main thread only)
     @Published var liveExercise: String = "—"   // model's current top class
     @Published var liveConfidence: Double = 0    // its probability, 0…1
     @Published var detectedCount: Int = 0        // sets the model has logged this session
     @Published var lastDetectedReps: Int = 0     // reps counted for the most recent logged set
+    @Published var lastDetectedExercise: String = ""   // exercise of the most recent logged set
+    @Published var lastDetectedConfirmed = false        // true once you've tapped fix/confirm on it
 
     /// Edit to change the exercises offered on the watch.
     /// Do NOT name one "rest" or "discard" — the transform script reserves those
@@ -143,7 +167,8 @@ final class RecorderModel: NSObject, ObservableObject {
     // MARK: - live auto-detect state (touched on workQueue, except @Published mirrors)
     private let classifier = ExerciseClassifier()
     private let repCounter = RepCounter()                 // unsupervised fallback
-    private let repModel = RepDensityCounter()            // supervised, if bundled
+    private let repModel = RepDensityCounter()            // tap-supervised, if bundled
+    private let repPeriodModel = RepPeriodCounter()        // count-only supervised, if bundled
     private var leadRing: [[Float]] = []    // recent samples kept for bout lead-in
     private var boutBuffer: [[Float]]?      // samples of the active bout (nil = none open)
     private var isAutoSession = false
@@ -159,13 +184,24 @@ final class RecorderModel: NSObject, ObservableObject {
     private var activeConfN = 0
     private var detectedHandle: FileHandle?
     private var detectedURL: URL?
+    private var lastDetectedStartMS: Double?   // identifies the row a watch correction targets
+    /// start_ms -> corrected reps, applied to detected.csv at session end (not
+    /// immediately — detectedHandle is still open and appending mid-session, and
+    /// rewriting the file out from under it would orphan the handle's file
+    /// descriptor, silently dropping every set logged after the correction).
+    private var pendingDetectedCorrections: [Double: Int] = [:]
 
     private static let readingsHeader =
         "subject,session,time_ms,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z\n"
     private static let setsHeader =
         "subject,session,exercise,start_ms,end_ms,reps\n"
+    /// reps_confirmed: 0 until the phone app's "Fix reps" correction rewrites it to
+    /// 1 — see SessionStore.confirmReps. Only reps_confirmed rows get folded into
+    /// the merged sets.csv export, so they can be used to evaluate/tune the
+    /// unsupervised counter (training/evaluate_reps.py) without touching classifier
+    /// training data.
     private static let detectedHeader =
-        "subject,session,exercise,start_ms,end_ms,reps,confidence\n"
+        "subject,session,exercise,start_ms,end_ms,reps,confidence,reps_confirmed\n"
 
     private var docsDir: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -175,6 +211,10 @@ final class RecorderModel: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        if let saved = UserDefaults.standard.string(forKey: Self.repCountingModeKey),
+           let mode = RepCountingMode(rawValue: saved) {
+            repCountingMode = mode
+        }
         if WCSession.isSupported() {
             WCSession.default.delegate = self
             WCSession.default.activate()
@@ -387,19 +427,88 @@ final class RecorderModel: NSObject, ObservableObject {
         // endMS stops at the pause, so the rep model shouldn't see past it either.
         if let n = trimTo, n < samples.count { samples.removeLast(samples.count - n) }
         guard endMS - activeStartMS >= minDetectedMS else { return }   // blip — ignore
-        // Prefer the trained density model; fall back to unsupervised if it isn't bundled.
-        let reps = repModel.count(samples, fs: Self.fs) ?? repCounter.count(samples, fs: Self.fs)
+        // .unsupervised forces the periodicity counter; .densityModel/.periodModel
+        // force their respective trained model (falling back if not bundled);
+        // .auto prefers the density model, since it's the most accurate when tapped
+        // data exists, then the period model, then the unsupervised counter.
+        let reps: Int
+        switch repCountingMode {
+        case .unsupervised:
+            reps = repCounter.count(samples, fs: Self.fs)
+        case .densityModel:
+            reps = repModel.count(samples, fs: Self.fs)
+                ?? repPeriodModel.count(samples, fs: Self.fs)
+                ?? repCounter.count(samples, fs: Self.fs)
+        case .periodModel:
+            reps = repPeriodModel.count(samples, fs: Self.fs)
+                ?? repCounter.count(samples, fs: Self.fs)
+        case .auto:
+            reps = repModel.count(samples, fs: Self.fs)
+                ?? repPeriodModel.count(samples, fs: Self.fs)
+                ?? repCounter.count(samples, fs: Self.fs)
+        }
         let avgConf = activeConfN > 0 ? activeConfSum / Double(activeConfN) : 0
         let line = "\(csvPrefix),\(label),"
-            + String(format: "%.1f,%.1f,%d,%.3f\n", activeStartMS, endMS, reps, avgConf)
+            + String(format: "%.1f,%.1f,%d,%.3f,0\n", activeStartMS, endMS, reps, avgConf)
         if let h = detectedHandle, let d = line.data(using: .utf8) {
             try? h.write(contentsOf: d)
         }
+        lastDetectedStartMS = activeStartMS   // workQueue-only; targets a later correction
         DispatchQueue.main.async {
             self.detectedCount += 1
             self.lastDetectedReps = reps
+            self.lastDetectedExercise = label
+            self.lastDetectedConfirmed = false
         }
         WKInterfaceDevice.current().play(.stop)
+    }
+
+    /// Nudge the just-logged detected set's rep count from the watch itself — the
+    /// live alternative to correcting later on the phone. Buffers the correction
+    /// (applied to detected.csv at session end) rather than writing it now.
+    func adjustLastDetectedReps(by delta: Int) {
+        guard detectedCount > 0 else { return }
+        lastDetectedReps = max(0, lastDetectedReps + delta)
+        recordLastDetectedCorrection()
+    }
+
+    /// The model's guess for the last detected set was already right — log it as
+    /// confirmed without changing the count. This is the cheap "yes, that's
+    /// correct" tap: no per-rep taps needed, just a nudge or a nod on the final
+    /// number, which is exactly what evaluate_reps.py's calibration and
+    /// train_reps_period.py train on.
+    func confirmLastDetectedReps() {
+        guard detectedCount > 0 else { return }
+        recordLastDetectedCorrection()
+    }
+
+    private func recordLastDetectedCorrection() {
+        lastDetectedConfirmed = true
+        let reps = lastDetectedReps
+        workQueue.addOperation { [weak self] in
+            guard let self, let startMS = self.lastDetectedStartMS else { return }
+            self.pendingDetectedCorrections[startMS] = reps
+        }
+    }
+
+    /// workQueue only, and only once detectedHandle is closed (see the comment on
+    /// pendingDetectedCorrections). Rewrites reps + reps_confirmed for every set
+    /// corrected this session, same schema SessionStore.confirmReps writes on the
+    /// phone, so buildMergedExport folds either source into the merged sets.csv.
+    private func applyPendingDetectedCorrections() {
+        guard !pendingDetectedCorrections.isEmpty, let url = detectedURL,
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        var lines = text.components(separatedBy: "\n")
+        for i in lines.indices {
+            let f = lines[i].split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard f.count >= 7, let start = Double(f[3]),
+                  let reps = pendingDetectedCorrections.first(where: { abs($0.key - start) < 0.5 })?.value
+            else { continue }
+            lines[i] = "\(f[0]),\(f[1]),\(f[2]),\(f[3]),\(f[4]),\(reps),\(f[6]),1"
+        }
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        pendingDetectedCorrections.removeAll()
     }
 
     private func openDetectedFile(sessionID: String) throws {
@@ -423,6 +532,7 @@ final class RecorderModel: NSObject, ObservableObject {
                 endMS: self.pendingEndMS ?? ProcessInfo.processInfo.systemUptime * 1000.0)
             try? self.detectedHandle?.close()
             self.detectedHandle = nil
+            self.applyPendingDetectedCorrections()
             if let d = self.detectedURL {
                 WCSession.default.transferFile(
                     d, metadata: ["kind": "detected", "session": sid, "subject": subj])
