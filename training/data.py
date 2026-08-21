@@ -58,9 +58,64 @@ def apply_exercise_roster(sets: pd.DataFrame) -> pd.DataFrame:
     return sets
 
 
+def data_dirs() -> list:
+    """Every directory load_raw()/rep_events.load_rep_events() read from, in
+    order — DATA_DIR first, then config.EXTRA_DATA_DIRS (old exports you're
+    merging back in because the app that produced them no longer has them)."""
+    return [config.DATA_DIR, *config.EXTRA_DATA_DIRS]
+
+
+def session_tag(dir_index: int) -> str | None:
+    """None for the primary directory (index 0) — its session ids are left
+    exactly as recorded, so this whole mechanism is a no-op until
+    EXTRA_DATA_DIRS is non-empty. Every other directory gets a stable tag so a
+    (subject, session) that happens to match another directory's — e.g. two
+    exports both containing a "S01,20260101-090000" from unrelated recordings —
+    can never silently merge two different bouts' readings and sets together.
+    MUST be applied identically to readings/sets/reps from the same directory, or
+    the join between them breaks silently (0 matches, not an error) — hence this
+    single shared function instead of each loader inventing its own scheme."""
+    return None if dir_index == 0 else f"extra{dir_index}"
+
+
+def read_tagged_csv(dir_, filename: str, tag: str | None):
+    """One file from one source directory, with `session` namespaced by `tag` if
+    given. Returns None (not an error) when the file doesn't exist — callers
+    merge whatever subset of readings/sets/reps each directory actually has."""
+    path = dir_ / filename
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    if tag and "session" in df.columns:
+        df = df.copy()
+        df["session"] = f"{tag}:" + df["session"].astype(str)
+    return df
+
+
 def load_raw() -> tuple[pd.DataFrame, pd.DataFrame]:
-    readings = pd.read_csv(config.READINGS_CSV)
-    sets = pd.read_csv(config.SETS_CSV)
+    dirs = data_dirs()
+    readings_parts, sets_parts = [], []
+    for i, d in enumerate(dirs):
+        tag = session_tag(i)
+        r = read_tagged_csv(d, "readings.csv", tag)
+        s = read_tagged_csv(d, "sets.csv", tag)
+        if r is None and s is None:
+            print(f"[data] {d}: no readings.csv or sets.csv found — skipped")
+            continue
+        if r is not None:
+            readings_parts.append(r)
+        if s is not None:
+            sets_parts.append(s)
+    if not readings_parts:
+        raise FileNotFoundError(f"No readings.csv found in any of: {dirs}")
+    if not sets_parts:
+        raise FileNotFoundError(f"No sets.csv found in any of: {dirs}")
+    if len(dirs) > 1:
+        print(f"[data] merged readings.csv/sets.csv from {len(dirs)} director"
+              f"{'y' if len(dirs) == 1 else 'ies'}: {dirs}")
+
+    readings = pd.concat(readings_parts, ignore_index=True)
+    sets = pd.concat(sets_parts, ignore_index=True)
     readings = readings.dropna(subset=config.CHANNELS + ["time_ms"])
     readings = readings.sort_values(["subject", "session", "time_ms"]).reset_index(drop=True)
     # One chokepoint: the classifier, both rep paths and evaluate_reps all load

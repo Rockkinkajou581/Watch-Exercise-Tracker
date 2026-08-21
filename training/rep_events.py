@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from data import load_raw
+from data import data_dirs, load_raw, read_tagged_csv, session_tag
 
 
 @dataclass
@@ -36,7 +36,18 @@ class RepDataset:
 
 
 def load_rep_events() -> pd.DataFrame:
-    reps = pd.read_csv(config.REPS_CSV)
+    """reps.csv from DATA_DIR plus any config.EXTRA_DATA_DIRS — same directories,
+    same session-tagging scheme as data.load_raw(), so a tap in an extra
+    directory's reps.csv still joins onto that directory's own sets/readings and
+    never onto DATA_DIR's (or another extra directory's) same-named session."""
+    parts = []
+    for i, d in enumerate(data_dirs()):
+        df = read_tagged_csv(d, "reps.csv", session_tag(i))
+        if df is not None:
+            parts.append(df)
+    if not parts:
+        raise FileNotFoundError(f"No reps.csv found in any of: {data_dirs()}")
+    reps = pd.concat(parts, ignore_index=True)
     reps = reps.dropna(subset=["subject", "session", "rep_time_ms"])
     return reps.sort_values(["subject", "session", "rep_time_ms"]).reset_index(drop=True)
 

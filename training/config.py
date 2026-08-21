@@ -13,6 +13,17 @@ READINGS_CSV = DATA_DIR / "readings.csv"
 SETS_CSV = DATA_DIR / "sets.csv"
 REPS_CSV = DATA_DIR / "reps.csv"    # per-rep tap timestamps from the phone rep tagger
 
+# Extra exported data to merge in at load time, on top of DATA_DIR — e.g. an old
+# merged export you still have sitting around from before an app reinstall wiped
+# the session folders it came from, so "Build merged export" can't regenerate it
+# anymore. Each entry is a directory that has its own readings.csv / sets.csv /
+# reps.csv (any subset — missing files are just skipped). See data.load_raw() and
+# rep_events.load_rep_events(), the two chokepoints every training/eval script
+# loads through, for how these get merged in safely.
+EXTRA_DATA_DIRS: list[Path] = [
+    # ROOT / "data_old",
+]
+
 # ----- signal -----
 FS = 50                             # Hz — MUST match motion.deviceMotionUpdateInterval on the watch
 CHANNELS = ["acc_x", "acc_y", "acc_z", "gyro_x", "gyro_y", "gyro_z"]
